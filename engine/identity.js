@@ -33,8 +33,14 @@ const BIBLE = require("./bible");
 // Wake / sleep hours per character. Must stay in sync with schedule() in ape.js.
 // When we eventually pull schedule into its own module, both this and that read
 // from a shared CHARACTER_SCHEDULE table.
-const WAKE_HOURS = { truman: 6.75, meryl: 6.5, marlon: 7.25, angela: 7 };
-const SLEEP_HOURS = { truman: 22.5, meryl: 22, marlon: 23, angela: 22 };
+const WAKE_HOURS = {
+  truman: 6.75, meryl: 6.5, marlon: 7.25, angela: 7,
+  larry: 6.5, ferris: 6.75, doris: 5.5, cal: 5.75, timmy: 5, rex: 6.25, hank: 6, esther: 7.5,
+};
+const SLEEP_HOURS = {
+  truman: 22.5, meryl: 22, marlon: 23, angela: 22,
+  larry: 22.5, ferris: 22, doris: 22.5, cal: 22, timmy: 20.5, rex: 22, hank: 21.5, esther: 21,
+};
 
 // Resolve a character key ("marcus") from a display name ("Marcus" or "Marcus
 // Jenkins"). Case-insensitive, uses first token. Returns null if unknown.

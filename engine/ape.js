@@ -394,8 +394,71 @@ function schedule(a, id) { // routine gates: who is out / asleep / in transit
     if (dow === 2 && h >= 9 && h < 10.5) return { away: "grocery" };
   }
 
-  const wake = id === "truman" ? 6.75 : id === "meryl" ? 6.5 : id === "marlon" ? 7.25 : 7;
-  const sleep = id === "truman" ? 22.5 : id === "meryl" ? 22 : id === "marlon" ? 23 : 22;
+  // Supporting cast schedules
+  if (id === "larry" && !isWeekend) {
+    if (h >= 8.33 && h < 8.5) return { away: "walking to work along Market Street" };
+    if (h >= 8.5 && h < 12)   return { away: "seahaven mutual" };
+    if (h >= 12 && h < 13)    return { away: "the good time café" };
+    if (h >= 13 && h < 17)    return { away: "seahaven mutual" };
+    if (h >= 17 && h < 17.2)  return { away: "walking home from work" };
+  }
+  if (id === "ferris" && !isWeekend) {
+    if (h >= 7.75 && h < 8)   return { away: "walking to seahaven mutual" };
+    if (h >= 8 && h < 12)     return { away: "seahaven mutual" };
+    if (h >= 12 && h < 13)    return { away: "lunch at his desk" };
+    if (h >= 13 && h < 17.5)  return { away: "seahaven mutual" };
+  }
+  if (id === "doris") {
+    // Café shift 6 days a week — Sunday off
+    if (dow !== 0) {
+      if (h >= 5.75 && h < 6)  return { away: "walking to the good time café" };
+      if (h >= 6 && h < 15)    return { away: "the good time café" };
+      if (h >= 15 && h < 15.25) return { away: "walking home from the café" };
+    }
+  }
+  if (id === "cal" && !isWeekend) {
+    // Route: 6:30-15:30. Pass through Lancaster Square around 8:30.
+    if (h >= 6.25 && h < 6.5)  return { away: "loading up at the post office" };
+    if (h >= 6.5 && h < 8.25)  return { away: "cal's route (upper Lancaster)" };
+    if (h >= 8.25 && h < 8.75) return { away: "lancaster square" };  // Truman sees him here
+    if (h >= 8.75 && h < 12)   return { away: "cal's route (Market Street)" };
+    if (h >= 12 && h < 12.5)   return { away: "the good time café" };
+    if (h >= 12.5 && h < 15.5) return { away: "cal's route (Chester and points north)" };
+  }
+  if (id === "timmy") {
+    // Dawn route every day
+    if (h >= 5 && h < 5.25)    return { away: "the paperboy dispatch" };
+    if (h >= 5.25 && h < 6.25) return { away: "the paper route" };
+    // School during weekdays
+    if (!isWeekend && h >= 8.25 && h < 15.25) return { away: "seahaven elementary" };
+  }
+  if (id === "rex") {
+    // Barbershop 6 days — Sunday closed
+    if (dow !== 0 && h >= 7.75 && h < 8)  return { away: "opening rex's barbershop" };
+    if (dow !== 0 && h >= 8 && h < 12)    return { away: "rex's barbershop" };
+    if (dow !== 0 && h >= 12 && h < 13)   return { away: "the good time café" };
+    if (dow !== 0 && h >= 13 && h < 17)   return { away: "rex's barbershop" };
+  }
+  if (id === "hank") {
+    // Harbor every day
+    if (h >= 6.75 && h < 7)   return { away: "walking to the harbor" };
+    if (h >= 7 && h < 12)     return { away: "seahaven harbor" };
+    if (h >= 12 && h < 12.75) return { away: "the good time café" };
+    if (h >= 12.75 && h < 17) return { away: "seahaven harbor" };
+  }
+  if (id === "esther") {
+    // Park bench 9:30-11:00 daily
+    if (h >= 9 && h < 9.25)   return { away: "walking to the park with the bread bag" };
+    if (h >= 9.25 && h < 11)  return { away: "seahaven park" };
+    if (h >= 11 && h < 11.25) return { away: "walking home from the park" };
+  }
+
+  const wake = id === "truman" ? 6.75 : id === "meryl" ? 6.5 : id === "marlon" ? 7.25 : id === "angela" ? 7
+    : id === "larry" ? 6.5 : id === "ferris" ? 6.75 : id === "doris" ? 5.5 : id === "cal" ? 5.75
+    : id === "timmy" ? 5 : id === "rex" ? 6.25 : id === "hank" ? 6 : id === "esther" ? 7.5 : 7;
+  const sleep = id === "truman" ? 22.5 : id === "meryl" ? 22 : id === "marlon" ? 23 : id === "angela" ? 22
+    : id === "larry" ? 22.5 : id === "ferris" ? 22 : id === "doris" ? 22.5 : id === "cal" ? 22
+    : id === "timmy" ? 20.5 : id === "rex" ? 22 : id === "hank" ? 21.5 : id === "esther" ? 21 : 22;
   if (h < wake || h >= sleep) return { asleep: true };
   return {};
 }
@@ -1452,11 +1515,21 @@ Render a single hidden-camera frame that captures ${namedOccupants} in this room
         clock: clockStr(),
         activityLines,
         // Freshest thought + spoken line for the sidebar chat feed.
-        thoughts: occupants.map(({ id: aid, agent }) => ({
-          who: agent.name,
-          think: agent.think || "",
-          said: agent.lastSaid || "",
-        })),
+        // Sidebar: thoughts should belong to the SUBJECT of this frame (the
+        // character the camera is watching), not every random other person
+        // who happens to be in the room. If Larry is at the office too when
+        // we capture Truman, the sidebar still says Truman's thoughts.
+        thoughts: (() => {
+          const subject = identities[0];
+          if (!subject) return [];
+          const subj = occupants.find(({ agent }) => agent.name === subject.name)?.agent;
+          if (!subj) return [];
+          return [{
+            who: subj.name,
+            think: subj.think || "",
+            said: subj.lastSaid || "",
+          }];
+        })(),
       };
       STREAM_BUFFER.appendFrame(bytes, bufMeta);
     } catch (e) {
@@ -2141,25 +2214,52 @@ async function startAutoCaptureLoop() {
     return awake[rotationIdx % awake.length];
   };
   const oneWorker = async () => {
-    let lastCapturedSlot = -1;
+    const capturedThisSlot = new Set();
+    let currentGateSlot = -1;
     const STREAM_BUFFER = require("./stream_buffer");
+    const STREAM_DIRECTOR = require("./stream_director");
+    // Track the last 5 subject+action pairs so the director enforces variety
+    const recentDirectorSignals = [];
     while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
       if (W.paused) { await new Promise((r) => setTimeout(r, 2000)); continue; }
-      // Backpressure: if buffer already has plenty ahead, don't render more.
+      if (W.slot !== currentGateSlot) {
+        capturedThisSlot.clear();
+        currentGateSlot = W.slot;
+      }
       const bufStat = STREAM_BUFFER.status();
       if (bufStat.backlog >= STREAM_BUFFER.BUFFER_TARGET) {
         await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
-      // We do NOT gate on slot advancement anymore — the buffered playback
-      // pointer is what the viewer sees, and it advances on its own timer.
-      // So keep pumping frames as fast as we can render.
-      const subject = pickSubject();
-      if (!subject) { await new Promise((r) => setTimeout(r, 5000)); continue; }
+
+      // Stream director picks the next subject based on scoring rules —
+      // interactions, object gestures, spoken lines, public locations. It
+      // penalizes recent repetition so we don't spam the same subject/action.
+      const pick = STREAM_DIRECTOR.pickNextSubject(W, recentDirectorSignals);
+      if (!pick) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      const dedupKey = `${W.slot}:${pick.key}`;
+      if (capturedThisSlot.has(dedupKey)) {
+        // Same slot + same subject already shot — wait for state to advance
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      capturedThisSlot.add(dedupKey);
+
       try {
-        const r = await captureLivingMoment(subject.location);
-        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location} · buffer ${bufStat.backlog + 1}/${STREAM_BUFFER.BUFFER_TARGET}`);
-        else if (r?.error) {
+        const r = await captureLivingMoment(pick.agent.location);
+        if (r?.id) {
+          olog(`STREAM: captured ${r.id} of ${pick.agent.name} @ ${pick.agent.location} · score ${pick.score} · buffer ${bufStat.backlog + 1}/${STREAM_BUFFER.BUFFER_TARGET}`);
+          // Log this pick so the director's variety guard sees it next time
+          recentDirectorSignals.push({
+            subjectKey: pick.key,
+            actNormalized: String(pick.agent.lastAct || "")
+              .toLowerCase().replace(/[^a-z ]/g, "").trim(),
+          });
+          if (recentDirectorSignals.length > 5) recentDirectorSignals.shift();
+        } else if (r?.error) {
           olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
           await new Promise((r) => setTimeout(r, 2000));
         }

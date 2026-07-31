@@ -1162,8 +1162,33 @@ function renderStreamHtml() {
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     #cam-label { padding: 6px 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: #d4d4d4; }
-    #hud-top-right { position: fixed; top: 24px; right: 24px; z-index: 10; }
+    #hud-top-right { position: fixed; top: 24px; right: 24px; z-index: 10; display: flex; gap: 8px; align-items: center; }
     #timestamp { padding: 6px 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; font-size: 11px; letter-spacing: 0.15em; color: #f4f4f4; font-variant-numeric: tabular-nums; }
+    /* Rendering-next indicator — small subtle chip near timestamp when a new
+       frame is being rendered. Not obnoxious. Just a hint of anticipation. */
+    #rendering-chip {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 3px;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #c4c4c4;
+    }
+    #rendering-chip.visible { display: inline-flex; }
+    #rendering-chip .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #c4c4c4;
+      animation: shimmer 1s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%, 100% { opacity: 0.3; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
     #hud-bottom { position: fixed; bottom: 24px; left: 24px; right: 24px; z-index: 10; display: flex; align-items: center; justify-content: space-between; }
     #subject { padding: 6px 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; font-size: 10.5px; letter-spacing: 0.15em; color: #d4d4d4; }
     #station { padding: 6px 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.14); border-radius: 3px; font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: #d4d4d4; }
@@ -1187,6 +1212,7 @@ function renderStreamHtml() {
     <div id="cam-label">SEAHAVEN CAM 07</div>
   </div>
   <div id="hud-top-right">
+    <div id="rendering-chip"><span class="dot"></span><span>NEXT SCENE</span></div>
     <div id="timestamp">DAY 1 · 06:45</div>
   </div>
   <div id="hud-bottom">
@@ -1201,6 +1227,10 @@ function renderStreamHtml() {
   const timeEl = document.getElementById('timestamp');
   const subjectEl = document.getElementById('subject');
   const liveEl = document.getElementById('live');
+  const renderingChipEl = document.getElementById('rendering-chip');
+
+  let lastMomentId = null;
+  let lastMomentAt = Date.now();
 
   function refreshFrame() {
     // Cache-bust so the browser refetches even if URL is the same
@@ -1224,15 +1254,29 @@ function renderStreamHtml() {
       if (d.subjectLocation) subjectEl.textContent = 'SUBJECT: TRUMAN · ' + d.subjectLocation.toUpperCase();
       liveEl.textContent = d.live ? 'LIVE' : 'PAUSED';
       liveEl.style.opacity = d.live ? 1 : 0.5;
+
+      // Detect new frame. If latestMomentId changed, refresh image immediately
+      // AND reset the stale timer.
+      if (d.latestMomentId && d.latestMomentId !== lastMomentId) {
+        lastMomentId = d.latestMomentId;
+        lastMomentAt = Date.now();
+        refreshFrame();
+        renderingChipEl.classList.remove('visible');
+      } else {
+        // Same frame still. If it's been more than 8 seconds since we last
+        // saw a new moment, show the "NEXT SCENE" chip.
+        const stale = Date.now() - lastMomentAt;
+        if (stale > 8000) renderingChipEl.classList.add('visible');
+        else renderingChipEl.classList.remove('visible');
+      }
     } catch (e) { /* transient network — try again next tick */ }
   }
 
-  // Initial + periodic refresh. Frame + status both every 2s for
-  // near-realtime updates as new hidden-camera frames arrive.
-  refreshFrame();
+  // Initial + periodic refresh. Status every 1s so we react to new frames
+  // within a second. Frame refresh is triggered by status change (event-driven)
+  // rather than on a timer so we don't waste bandwidth polling the JPEG.
   refreshStatus();
-  setInterval(refreshFrame, 2000);
-  setInterval(refreshStatus, 2000);
+  setInterval(refreshStatus, 1000);
 })();
 </script>
 </body>

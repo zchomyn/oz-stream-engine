@@ -1344,6 +1344,15 @@ async function captureLivingMoment(location) {
     return parts.join(" ");
   });
 
+  // Stream engine: anti-repetition. Track the last 3 captures. Feed their
+  // one-line summaries into the prompt as "recently rendered — do NOT render
+  // any of these again." This is what stops the loop from spamming "Truman
+  // hanging his coat" for 5 minutes when he actually did it once.
+  W.__recentCaptures = W.__recentCaptures || [];
+  const antiRepeat = W.__recentCaptures.length
+    ? `\nRECENTLY RENDERED FRAMES (do NOT repeat these — the stream is a sequence of distinct moments, not variations on one):\n${W.__recentCaptures.map((r, i) => `  ${i + 1}. ${r}`).join("\n")}\n\nThis new frame must capture a DIFFERENT moment. If the character is in the same room, they must be doing something visibly different (different posture, different action, different focal object). If nothing new is happening yet, focus on the smallest ambient detail — a hand adjusting a collar, a glance out the window, condensation on a glass, the second hand on the wall clock. Never re-render an action already in the list above.`
+    : "";
+
   // 5. Wardrobe manifest (per-character locks) + reference portraits (every
   // occupant, no truncation — this is the Identity Layer's whole point).
   // Session 8c: pass running campaigns' palettes so wardrobe drift lands.
@@ -1378,6 +1387,7 @@ ${identities.map((id) => `- ${id.name}`).join("\n")}
 
 WHAT THEY ARE DOING RIGHT NOW (render this moment, not a different one):
 ${activityLines.map((l) => "- " + l).join("\n")}
+${antiRepeat}
 
 ${wardrobeBlock}
 
@@ -1417,6 +1427,13 @@ Render a single hidden-camera frame that captures ${namedOccupants} in this room
       capturedAt: new Date().toISOString(),
     };
     MOMENT_STORE.writeMeta(id, meta);
+
+    // Stream engine: log a one-line summary of this moment so the next
+    // capture prompt knows not to repeat it. Keep only the last 3.
+    const summary = `${identities[0]?.name || "someone"} at ${location}, ${clockStr()} — ${activityLines.join("; ")}`.slice(0, 240);
+    W.__recentCaptures = W.__recentCaptures || [];
+    W.__recentCaptures.push(summary);
+    if (W.__recentCaptures.length > 3) W.__recentCaptures.shift();
 
     // Session 2c: mirror to DB. Storyboard-scene linking happens later when
     // the "Expand to storyboard" button fires.

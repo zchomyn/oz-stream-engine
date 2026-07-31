@@ -511,7 +511,20 @@ function ritualPressure(a, id) {
   // Truman weekday
   if (id === "truman" && !isWeekend) {
     if (h >= 6.75 && h < 7.15)   return ritual("morning: alarm off, up quietly, into the bathroom. Electric razor. Splash of aftershave. The small rituals of a man who takes care");
-    if (h >= 7.15 && h < 7.75)   return ritual("BREAKFAST WITH MERYL: kitchen table, cornflakes with milk, coffee from the glass carafe. Sit down. Talk to her — even one line about the weather, about work, about what's on the news. Do not stand at the counter alone");
+    // Breakfast variety — different day of week, different beat. Some
+    // mornings coffee, some toast, some just standing at the window looking
+    // at the light. Not always the same coffee-pour.
+    if (h >= 7.15 && h < 7.75) {
+      const breakfastRotation = [
+        "BREAKFAST WITH MERYL: kitchen table, dry toast with butter and a small dish of jam, orange juice from the fridge. Talk to her about the weather or the news — she wants to hear your voice",
+        "BREAKFAST WITH MERYL: standing at the kitchen window with a slice of toast, watching Cal the mailman come up the walk. Meryl at the table with her tea",
+        "BREAKFAST WITH MERYL: kitchen table, a plate of scrambled eggs Meryl made, a glass of milk. She asks what's on today at the office",
+        "BREAKFAST WITH MERYL: no time for a real breakfast — a slice of toast in one hand, adjusting the tie with the other, Meryl handing you a wrapped lunch for the day",
+        "BREAKFAST WITH MERYL: kitchen table, coffee from the glass carafe, cornflakes with milk — the standard weekday routine. She's in her uniform already",
+        "BREAKFAST WITH MERYL: just fruit and a banana. She mentions the neighbor's dog was barking again. You listen more than you talk",
+      ];
+      return ritual(breakfastRotation[W.day % breakfastRotation.length]);
+    }
     if (h >= 7.75 && h < 8.33)   return ritual("morning at home — Zenith TV on the news, quick look at the paper (Seahaven Chronicle), Meryl grabs her cardigan, you check your wallet and keys");
     if (h >= 8.33 && h < 8.5)    return ritual("walking to work along Market Street right now — greet the neighbours (Mr Fenwick, the twins on their bikes, the mailman if it's early enough) — notice one specific thing on this specific walk");
     if (h >= 12 && h < 13)       return ritual("lunch at the Good Time Café — same booth by the window, meatloaf sandwich or the tuna melt, coffee, sometimes Marlon drops by mid-route");
@@ -1459,13 +1472,29 @@ async function captureLivingMoment(location) {
   // Atmosphere descriptor — lighting, sky, shadow language for the model.
   const atmosphere = TIME_OF_DAY.atmosphereFor(worldHour, W.env?.weather || "clear");
 
-  // Stream engine: world memory. Objects visible at this location must appear
-  // with their current state. Coffee cup was full → now half-full. Coat on
-  // hook remains on hook. Dishes accumulate. The model treats W.objects as
-  // ground truth and renders exactly those objects with the state they hold.
+  // Stream engine: world memory. Only inject objects that are STORY-RELEVANT
+  // to this frame — either time-of-day active (coffee maker in morning) or
+  // being interacted with by the subject. All other permanent fixtures rely
+  // on the room plate. This stops "coffee carafe half full" from appearing
+  // in every kitchen frame at 6:39pm.
   const visibleObjects = (W.objects || []).filter((o) => o.at === location);
-  const objectsBlock = visibleObjects.length
-    ? `\nOBJECTS PRESENT IN THIS ROOM (must appear in the frame with these exact states — this is world memory, not fresh imagination):\n${visibleObjects.map((o) => `- ${o.name}${o.state ? ` — state: ${o.state}` : ""}`).join("\n")}\nIf any of these objects would naturally be interacted with in this moment (a hand on the cup, an eye on the newspaper, a coat being lifted from the hook), show that interaction. If they are just present, show them where they live.`
+  const subjActLower = (subjectAgent?.lastAct || "").toLowerCase();
+  const relevantObjects = visibleObjects.filter((o) => {
+    const name = String(o.name || "").toLowerCase();
+    const stateStr = String(o.state || "").toLowerCase();
+    // Explicitly stated as "not visible", "put away", "closed and put away" — skip
+    if (stateStr.includes("not visible") || stateStr.includes("put away in the cupboard") || stateStr.includes("put away in the cabinet")) return false;
+    // Being interacted with by the subject?
+    const nameWords = name.split(/[^a-z]+/).filter((w) => w.length > 3);
+    for (const w of nameWords) {
+      if (subjActLower.includes(w)) return true;
+    }
+    // Object states that carry visual signal beyond the plate (TV on, curtains drawn, mug in sink)
+    if (stateStr.includes("on, ") || stateStr.includes("drawn") || stateStr.includes("in the sink") || stateStr.includes("open on the counter") || stateStr.includes("brewing")) return true;
+    return false;
+  });
+  const objectsBlock = relevantObjects.length
+    ? `\nOBJECTS ACTIVE IN THIS FRAME (must appear with these exact states — this is world memory):\n${relevantObjects.map((o) => `- ${o.name}${o.state ? ` — ${o.state}` : ""}`).join("\n")}`
     : "";
 
   const promptText = `HIDDEN CAMERA CAPTURE. This is a still frame pulled from a covert security camera. Not a photograph, not a cinematographer's shot. The subjects do not know they are being observed.
@@ -2277,7 +2306,7 @@ async function startAutoCaptureLoop() {
             actNormalized: String(pick.agent.lastAct || "")
               .toLowerCase().replace(/[^a-z ]/g, "").trim(),
           });
-          if (recentDirectorSignals.length > 5) recentDirectorSignals.shift();
+          if (recentDirectorSignals.length > 10) recentDirectorSignals.shift();
         } else if (r?.error) {
           olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
           await new Promise((r) => setTimeout(r, 2000));

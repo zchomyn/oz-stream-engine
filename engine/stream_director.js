@@ -35,6 +35,20 @@ const PUBLIC_LOCATIONS = [
   "seahaven harbor", "market street", "grocery", "rex's barbershop",
 ];
 
+// Keywords we track for cross-subject rate limiting. If any of these appears
+// in 3+ of the recent captures, penalize new captures that mention them.
+// This is what stops "Truman pours coffee, then Larry pours coffee, then
+// Doris pours coffee" — the whole world converging on the same beat.
+const RATE_LIMITED_KEYWORDS = [
+  "coffee", "carafe", "mug", "pour",
+  "coat", "jacket", "slicker", "hook",
+  "shave", "razor",
+  "newspaper", "chronicle",
+  "cereal", "cornflakes",
+  "wallet", "keys",
+  "collar", "tie",
+];
+
 function scoreSubject(agent, key, W, recentCaptures) {
   if (agent.asleep) return -30;
   let score = 0;
@@ -68,6 +82,17 @@ function scoreSubject(agent, key, W, recentCaptures) {
   const actNormalized = act.replace(/[^a-z ]/g, "").trim();
   if (actNormalized && recentCaptures.some((r) => r.actNormalized === actNormalized)) {
     score -= 15;
+  }
+
+  // Cross-subject rate limit: if any tracked keyword appears in >=3 recent
+  // captures AND the current subject's action mentions it, HEAVY penalty.
+  // This stops the world from converging on one beat across all subjects.
+  for (const kw of RATE_LIMITED_KEYWORDS) {
+    if (!act.includes(kw)) continue;
+    const recentHits = recentCaptures.filter((r) => r.actNormalized.includes(kw)).length;
+    if (recentHits >= 3) score -= 40;
+    else if (recentHits >= 2) score -= 20;
+    else if (recentHits >= 1) score -= 8;
   }
 
   return score;

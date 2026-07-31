@@ -1374,10 +1374,21 @@ async function captureLivingMoment(location) {
   for (const pp of portraitParts) parts.push(pp);
 
   const namedOccupants = identities.map((id) => id.name).join(", ");
-  // Stream engine: wrap in CCTV aesthetic. The camera position and stamp
-  // metadata are picked based on the location; the wrapper handles all the
-  // visual language (sensor, color, composition, timestamp).
-  const cam = CCTV.cameraMeta(location, W.day, clockStr());
+  // Stream engine: wrap in CCTV aesthetic. The camera position is picked
+  // based on location AND what's happening — mug cam when drinking coffee,
+  // coat button cam when walking to work, newsprint cam when reading, etc.
+  const activityContext = activityLines.join(" ");
+  const cam = CCTV.cameraMeta(location, W.day, clockStr(), activityContext);
+
+  // Stream engine: world memory. Objects visible at this location must appear
+  // with their current state. Coffee cup was full → now half-full. Coat on
+  // hook remains on hook. Dishes accumulate. The model treats W.objects as
+  // ground truth and renders exactly those objects with the state they hold.
+  const visibleObjects = (W.objects || []).filter((o) => o.at === location);
+  const objectsBlock = visibleObjects.length
+    ? `\nOBJECTS PRESENT IN THIS ROOM (must appear in the frame with these exact states — this is world memory, not fresh imagination):\n${visibleObjects.map((o) => `- ${o.name}${o.state ? ` — state: ${o.state}` : ""}`).join("\n")}\nIf any of these objects would naturally be interacted with in this moment (a hand on the cup, an eye on the newspaper, a coat being lifted from the hook), show that interaction. If they are just present, show them where they live.`
+    : "";
+
   const promptText = `HIDDEN CAMERA CAPTURE. This is a still frame pulled from a covert security camera. Not a photograph, not a cinematographer's shot. The subjects do not know they are being observed.
 
 SCENE: ${sceneDescriptor}
@@ -1388,6 +1399,7 @@ ${identities.map((id) => `- ${id.name}`).join("\n")}
 WHAT THEY ARE DOING RIGHT NOW (render this moment, not a different one):
 ${activityLines.map((l) => "- " + l).join("\n")}
 ${antiRepeat}
+${objectsBlock}
 
 ${wardrobeBlock}
 
@@ -1427,6 +1439,29 @@ Render a single hidden-camera frame that captures ${namedOccupants} in this room
       capturedAt: new Date().toISOString(),
     };
     MOMENT_STORE.writeMeta(id, meta);
+
+    // Stream engine: also append this frame to the buffered playback ring.
+    try {
+      const STREAM_BUFFER = require("./stream_buffer");
+      const bufMeta = {
+        momentId: id,
+        camLabel: cam.label,
+        subject: identities[0]?.name || null,
+        location,
+        day: W.day,
+        clock: clockStr(),
+        activityLines,
+        // Freshest thought + spoken line for the sidebar chat feed.
+        thoughts: occupants.map(({ id: aid, agent }) => ({
+          who: agent.name,
+          think: agent.think || "",
+          said: agent.lastSaid || "",
+        })),
+      };
+      STREAM_BUFFER.appendFrame(bytes, bufMeta);
+    } catch (e) {
+      olog(`STREAM: buffer append failed — ${e.message.slice(0, 120)}`);
+    }
 
     // Stream engine: log a one-line summary of this moment so the next
     // capture prompt knows not to repeat it. Keep only the last 3.
@@ -2107,25 +2142,30 @@ async function startAutoCaptureLoop() {
   };
   const oneWorker = async () => {
     let lastCapturedSlot = -1;
+    const STREAM_BUFFER = require("./stream_buffer");
     while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
       if (W.paused) { await new Promise((r) => setTimeout(r, 2000)); continue; }
-      // Wait for the sim to advance to a new slot before capturing again.
-      // This is what makes the stream sequential: each frame is a NEW moment,
-      // not another angle of the same one.
-      if (W.slot === lastCapturedSlot) {
-        await new Promise((r) => setTimeout(r, 1000));
+      // Backpressure: if buffer already has plenty ahead, don't render more.
+      const bufStat = STREAM_BUFFER.status();
+      if (bufStat.backlog >= STREAM_BUFFER.BUFFER_TARGET) {
+        await new Promise((r) => setTimeout(r, 3000));
         continue;
       }
+      // We do NOT gate on slot advancement anymore — the buffered playback
+      // pointer is what the viewer sees, and it advances on its own timer.
+      // So keep pumping frames as fast as we can render.
       const subject = pickSubject();
       if (!subject) { await new Promise((r) => setTimeout(r, 5000)); continue; }
-      const capturedSlot = W.slot;
       try {
         const r = await captureLivingMoment(subject.location);
-        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location} (slot ${capturedSlot})`);
-        else if (r?.error) olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
-        lastCapturedSlot = capturedSlot;
+        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location} · buffer ${bufStat.backlog + 1}/${STREAM_BUFFER.BUFFER_TARGET}`);
+        else if (r?.error) {
+          olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       } catch (e) {
         olog(`STREAM: capture error — ${String(e.message).slice(0, 120)}`);
+        await new Promise((r) => setTimeout(r, 2000));
       }
     }
   };
@@ -2585,7 +2625,7 @@ function shotImage(sparkId, idx) {
 }
 
 module.exports = {
-  W, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS,
+  W, CFG, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, genImage, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS,
   autoResume: () => { if (W.paused) { W.paused = false; runSlot().catch((e) => olog(`ERROR beat(autoResume): ${String(e.message).slice(0, 140)}`)); olog("world auto-resumed by campaign start"); } },
   worldPaused: () => W.paused,
   control: {

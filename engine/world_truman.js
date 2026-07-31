@@ -50,16 +50,16 @@ const MONEY = {
 };
 
 const OBJECTS = [
-  { name: "cornflakes box on the counter, top folded twice", at: "kitchen" },
-  { name: "coffee maker with clear glass carafe, half-full", at: "kitchen" },
-  { name: "yellow ceramic mug in the sink from yesterday", at: "kitchen" },
-  { name: "framed photo of Truman and his father on a small sailboat, on the mantel", at: "living room" },
-  { name: "Zenith TV in walnut console, tuned to the morning news", at: "living room" },
-  { name: "Reader's Digest and a TV Guide on the coffee table", at: "living room" },
-  { name: "yellow rain slicker on a hook by the front door", at: "front hallway" },
-  { name: "framed wedding photograph over the master bed", at: "master bedroom" },
-  { name: "small blue alarm clock on the nightstand", at: "master bedroom" },
-  { name: "electric razor on the bathroom sink, cord coiled", at: "bathroom" },
+  { name: "cornflakes box on the counter, top folded twice", at: "kitchen", state: "unopened, top folded twice" },
+  { name: "coffee maker with clear glass carafe", at: "kitchen", state: "carafe half-full of fresh coffee, red brew light on" },
+  { name: "yellow ceramic mug in the sink", at: "kitchen", state: "one used mug from yesterday, small ring of coffee stain inside" },
+  { name: "framed photo of Truman and his father on a small sailboat, on the mantel", at: "living room", state: "sepia-toned, slightly dusty frame" },
+  { name: "Zenith TV in walnut console", at: "living room", state: "on, tuned to Seahaven Morning News, low volume" },
+  { name: "Reader's Digest and a TV Guide on the coffee table", at: "living room", state: "arranged neatly, TV Guide open to today's page" },
+  { name: "yellow rain slicker on a hook by the front door", at: "front hallway", state: "hanging on the middle hook, damp collar from yesterday" },
+  { name: "framed wedding photograph over the master bed", at: "master bedroom", state: "hung straight, gold frame, dust on the top edge" },
+  { name: "small blue alarm clock on the nightstand", at: "master bedroom", state: "reading close to Truman's real-world wake time" },
+  { name: "electric razor on the bathroom sink", at: "bathroom", state: "cord coiled, plugged in but off" },
 ];
 
 const AGENTS = {

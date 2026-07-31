@@ -41,37 +41,52 @@ const server = http.createServer(async (req, res) => {
   }
   if (streamUrl === "/stream/latest.jpg") {
     try {
-      const latest = APE.MOMENT_STORE.latest();
-      if (!latest || !latest.b64) {
-        // Serve a 1x1 transparent placeholder if no frames yet.
+      // Stream engine: serve from buffered playback ring. Consumer pointer
+      // advances every STREAM_PLAYBACK_MS. Frame that comes back is
+      // frozen for the entire ~6 seconds so different browser polls all see
+      // the same JPEG until the pointer advances.
+      const STREAM_BUFFER = require("./stream_buffer");
+      const frame = STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
+      if (!frame) {
+        // No frames buffered yet — serve a 1x1 transparent placeholder.
         const placeholder = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
         res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
         return res.end(placeholder);
       }
-      const buf = Buffer.from(latest.b64, "base64");
       res.writeHead(200, {
         "Content-Type": "image/jpeg",
         "Cache-Control": "no-store, must-revalidate",
         "Access-Control-Allow-Origin": "*",
+        "X-Stream-Index": String(frame.index),
+        "X-Stream-Backlog": String(frame.backlog),
       });
-      return res.end(buf);
+      return res.end(frame.bytes);
     } catch (e) {
       return json(res, 500, { error: e.message });
     }
   }
   if (streamUrl === "/stream/status") {
     try {
-      const latest = APE.MOMENT_STORE.latest();
+      const STREAM_BUFFER = require("./stream_buffer");
+      const frame = STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
+      const bufStat = STREAM_BUFFER.status();
       const snap = APE.snapshot();
-      const trumanLoc = snap.characters?.truman?.location || "unknown";
+      // Subject data comes from the currently-playing frame's meta (what the
+      // viewer is watching), not from live sim state (which is minutes ahead).
+      const meta = frame?.meta || {};
+      const thoughts = meta.thoughts || [];
       return json(res, 200, {
-        live: !snap.isPaused,
-        day: snap.day,
-        clock: snap.clock,
-        subject: "Truman Burbank",
-        subjectLocation: trumanLoc,
-        latestMomentId: latest?.id || null,
-        camLabel: latest?.meta?.camLabel || null,
+        live: !snap.isPaused && bufStat.healthy,
+        day: meta.day || snap.day,
+        clock: meta.clock || snap.clock,
+        subject: meta.subject || "Truman Burbank",
+        subjectLocation: meta.location || null,
+        camLabel: meta.camLabel || null,
+        frameIndex: frame?.index ?? null,
+        // Buffered playback info
+        buffer: bufStat,
+        // Chat sidebar payload
+        thoughts,
       });
     } catch (e) {
       return json(res, 500, { error: e.message });
@@ -1145,7 +1160,7 @@ function renderStreamHtml() {
     html, body { width: 100%; height: 100%; background: #000; color: #d4d4d4; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow: hidden; }
     #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; }
     #frame {
-      max-width: 100vw;
+      max-width: 100%;
       max-height: 100vh;
       object-fit: contain;
       display: block;
@@ -1198,6 +1213,53 @@ function renderStreamHtml() {
         radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%),
         repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 3px);
     }
+    /* Chat sidebar — rolling feed of Truman's thoughts and dialogue */
+    #chat-sidebar {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: 340px;
+      background: rgba(0,0,0,0.72);
+      border-left: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    #chat-header {
+      padding: 20px 20px 12px;
+      font-size: 10.5px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #a4a4a4;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    #chat-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #chat-feed::-webkit-scrollbar { width: 4px; }
+    #chat-feed::-webkit-scrollbar-track { background: transparent; }
+    #chat-feed::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    .chat-entry { color: #d4d4d4; font-size: 12.5px; line-height: 1.5; animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .chat-who { color: #f4f4f4; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 3px; }
+    .chat-said { color: #f4f4f4; font-style: normal; }
+    .chat-said::before { content: '\\201C'; color: #888; margin-right: 2px; }
+    .chat-said::after { content: '\\201D'; color: #888; margin-left: 2px; }
+    .chat-thought { color: #a4a4a4; font-style: italic; font-size: 12px; }
+    .chat-thought::before { content: '~ '; color: #666; }
+    #chat-sidebar.hidden { display: none; }
+    /* On narrower screens, hide the sidebar entirely for now */
+    @media (max-width: 768px) {
+      #chat-sidebar { display: none; }
+      #stage { padding-right: 0; }
+    }
+    #stage { padding-right: 340px; transition: padding-right 0.3s; }
     #placeholder { color: #666; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; text-align: center; padding: 20px; }
   </style>
 </head>
@@ -1219,6 +1281,10 @@ function renderStreamHtml() {
     <div id="subject">SUBJECT: TRUMAN BURBANK</div>
     <div id="station">SEAHAVEN OBSERVATION NETWORK</div>
   </div>
+  <aside id="chat-sidebar">
+    <div id="chat-header">TRANSMISSIONS</div>
+    <div id="chat-feed"></div>
+  </aside>
 <script>
 (async function () {
   const frameEl = document.getElementById('frame');
@@ -1228,9 +1294,39 @@ function renderStreamHtml() {
   const subjectEl = document.getElementById('subject');
   const liveEl = document.getElementById('live');
   const renderingChipEl = document.getElementById('rendering-chip');
+  const chatFeedEl = document.getElementById('chat-feed');
 
   let lastMomentId = null;
   let lastMomentAt = Date.now();
+  const seenChatKeys = new Set();
+
+  function appendChat(who, kind, text) {
+    if (!text) return;
+    // Dedup: same person+kind+text within recent window shouldn't re-add
+    const key = who + '|' + kind + '|' + text;
+    if (seenChatKeys.has(key)) return;
+    seenChatKeys.add(key);
+    // Keep the set from growing forever — only remember last 200 unique keys
+    if (seenChatKeys.size > 200) {
+      const first = seenChatKeys.values().next().value;
+      seenChatKeys.delete(first);
+    }
+    const entry = document.createElement('div');
+    entry.className = 'chat-entry';
+    const whoEl = document.createElement('div');
+    whoEl.className = 'chat-who';
+    whoEl.textContent = who;
+    const textEl = document.createElement('div');
+    textEl.className = kind === 'said' ? 'chat-said' : 'chat-thought';
+    textEl.textContent = text;
+    entry.appendChild(whoEl);
+    entry.appendChild(textEl);
+    chatFeedEl.appendChild(entry);
+    // Keep only last 30 entries in DOM
+    while (chatFeedEl.children.length > 30) chatFeedEl.removeChild(chatFeedEl.firstChild);
+    // Auto-scroll bottom
+    chatFeedEl.scrollTop = chatFeedEl.scrollHeight;
+  }
 
   function refreshFrame() {
     // Cache-bust so the browser refetches even if URL is the same
@@ -1257,11 +1353,18 @@ function renderStreamHtml() {
 
       // Detect new frame. If latestMomentId changed, refresh image immediately
       // AND reset the stale timer.
-      if (d.latestMomentId && d.latestMomentId !== lastMomentId) {
-        lastMomentId = d.latestMomentId;
+      if (d.frameIndex != null && d.frameIndex !== lastMomentId) {
+        lastMomentId = d.frameIndex;
         lastMomentAt = Date.now();
         refreshFrame();
         renderingChipEl.classList.remove('visible');
+        // Populate chat sidebar with this frame's thoughts + spoken lines
+        if (Array.isArray(d.thoughts)) {
+          for (const t of d.thoughts) {
+            if (t.said) appendChat(t.who, 'said', t.said);
+            if (t.think) appendChat(t.who, 'think', t.think);
+          }
+        }
       } else {
         // Same frame still. If it's been more than 8 seconds since we last
         // saw a new moment, show the "NEXT SCENE" chip.

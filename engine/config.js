@@ -25,16 +25,17 @@ module.exports = {
   PORT: parseInt(process.env.PORT || "8090", 10),
 
   // Sim pacing
-  // Stream engine: compressed pacing. 5 sim-minutes per slot, 15 seconds per
-  // real slot. Truman's 24-hour day plays out in ~72 minutes of real time, so
-  // the viewer sees him move through his life every 15 seconds — coffee,
-  // then walking to work, then at his desk, then lunch, etc.
-  SLOT_SIM_MINUTES: 5,
-  SLOT_REAL_MS: 15000,
-  DIRECTOR_EVERY_SLOTS: 18,      // director every ~90 sim-min
+  // Stream engine: sim runs FAST (produces buffer content quickly). Playback
+  // is smooth from buffer at STREAM_PLAYBACK_MS intervals. Producer + consumer
+  // are decoupled — sim can churn through Truman's day in real minutes while
+  // the viewer sees smooth 6-second playback.
+  SLOT_SIM_MINUTES: 30,          // each slot = 30 sim-min so beats accumulate quickly
+  SLOT_REAL_MS: 3000,            // slot every 3s real time
+  DIRECTOR_EVERY_SLOTS: 3,       // director every ~90 sim-min
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
-  STREAM_PARALLEL: 1,            // serial — one frame per moment
+  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),
   STREAM_REALTIME_SYNC: process.env.STREAM_REALTIME_SYNC !== "false",
+  STREAM_PLAYBACK_MS: parseInt(process.env.STREAM_PLAYBACK_MS || "6000", 10),   // consumer tick
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

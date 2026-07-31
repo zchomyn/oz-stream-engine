@@ -28,7 +28,12 @@ module.exports = {
   SLOT_SIM_MINUTES: 15,          // each slot advances 15 sim-minutes
   SLOT_REAL_MS: 30000,           // one slot every 30s real time (speed control at runtime)
   DIRECTOR_EVERY_SLOTS: 6,       // director pass scans for highlights every N slots
-  AUTO_CAPTURE_EVERY_SLOTS: parseInt(process.env.AUTO_CAPTURE_EVERY_SLOTS || "3", 10),   // stream: auto-capture cadence
+  // Stream engine: continuous auto-capture. As soon as one render finishes
+  // another starts. STREAM_PARALLEL controls how many concurrent renders.
+  // Default 2 is a good balance between throughput and API friendliness.
+  // Set STREAM_AUTO_CAPTURE=false to disable auto-capture entirely.
+  STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
+  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

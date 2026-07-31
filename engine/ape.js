@@ -1039,34 +1039,12 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     // 3) DIRECTOR (novelty-gated) every N slots
     if (W.slot % CFG.DIRECTOR_EVERY_SLOTS === 0) await directorPass();
 
-    // STREAM ENGINE: auto-capture every N slots. Picks a subject (Truman
-    // first if awake; otherwise any awake character) and captures a hidden-
-    // camera frame of wherever they are right now. Fire-and-forget so the
-    // ~20-40s render doesn't block the tick. If the previous capture is
-    // still rendering when we hit this again, we skip this cycle.
-    if (!W.__autoCaptureInFlight && W.slot % CFG.AUTO_CAPTURE_EVERY_SLOTS === 0) {
-      const truman = W.agents.truman;
-      let subject = null;
-      if (truman && !truman.asleep) subject = truman;
-      else {
-        for (const [id, a] of Object.entries(W.agents)) {
-          if (!a.asleep) { subject = a; break; }
-        }
-      }
-      if (subject) {
-        W.__autoCaptureInFlight = true;
-        (async () => {
-          try {
-            const r = await captureLivingMoment(subject.location);
-            if (r?.id) olog(`STREAM: auto-captured ${r.id} of ${subject.name} at ${subject.location}`);
-            else if (r?.error) olog(`STREAM: auto-capture skipped — ${String(r.error).slice(0, 120)}`);
-          } catch (e) {
-            olog(`STREAM: auto-capture error — ${String(e.message).slice(0, 120)}`);
-          } finally {
-            W.__autoCaptureInFlight = false;
-          }
-        })();
-      }
+    // STREAM ENGINE: kick the continuous auto-capture loop if it isn't
+    // already running. The loop lives separately from the slot tick — see
+    // startAutoCaptureLoop() at boot. This line is just a safety kickstarter
+    // in case the loop died.
+    if (CFG.STREAM_AUTO_CAPTURE && !W.__autoCaptureLoopRunning) {
+      startAutoCaptureLoop();
     }
 
     // 4) REFLECT nightly
@@ -2085,6 +2063,51 @@ function registerWorkerHandlers() {
   });
 }
 
+// STREAM ENGINE: continuous auto-capture loop.
+// Runs as many parallel captureLivingMoment renders as CFG.STREAM_PARALLEL
+// allows. As soon as one finishes, another starts. Subject picked each
+// call — Truman prioritized while awake, other awake characters after.
+// Sleep windows still respected (asleep = boring; we skip and pick another).
+// If everyone is asleep, we back off 5 seconds and try again.
+async function startAutoCaptureLoop() {
+  if (W.__autoCaptureLoopRunning) return;
+  W.__autoCaptureLoopRunning = true;
+  const parallel = Math.max(1, CFG.STREAM_PARALLEL || 1);
+  olog(`STREAM: starting auto-capture loop, parallel=${parallel}`);
+  // Rotation index — ensures we don't always shoot Truman even when others
+  // are also awake and doing interesting things. Truman gets first pick.
+  let rotationIdx = 0;
+  const pickSubject = () => {
+    const truman = W.agents.truman;
+    if (truman && !truman.asleep && rotationIdx % 3 !== 2) {
+      rotationIdx++;
+      return truman;
+    }
+    const awake = Object.values(W.agents).filter((a) => !a.asleep);
+    if (!awake.length) return null;
+    rotationIdx++;
+    return awake[rotationIdx % awake.length];
+  };
+  const oneWorker = async () => {
+    while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
+      if (W.paused) { await new Promise((r) => setTimeout(r, 2000)); continue; }
+      const subject = pickSubject();
+      if (!subject) { await new Promise((r) => setTimeout(r, 5000)); continue; }
+      try {
+        const r = await captureLivingMoment(subject.location);
+        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location}`);
+        else if (r?.error) olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
+      } catch (e) {
+        olog(`STREAM: capture error — ${String(e.message).slice(0, 120)}`);
+      }
+      // Tiny pacing so we don't hit the model API in a tight burst if a
+      // render returns instantly (rare, but).
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  };
+  for (let i = 0; i < parallel; i++) oneWorker();
+}
+
 function start() {
   // v2.38.2: reseed flag check. If /api/admin/reseed-world was called before
   // the last exit, .RESEED_ON_BOOT sits next to the DB on the persistent
@@ -2194,6 +2217,8 @@ function start() {
   } catch (e) { olog(`ERROR boot retention: ${e.message.slice(0, 140)}`); }
   setSpeed(W.speedMs);
   olog(`BOOT ${CFG.APP_VERSION} — world at day ${W.day} ${clockStr()}, slot ${W.slot}, ${W.paused ? "paused" : "running"}, ${CAMPAIGNS.list().length} campaigns loaded`);
+  // Stream engine: kickstart the continuous capture loop.
+  if (CFG.STREAM_AUTO_CAPTURE) startAutoCaptureLoop();
 }
 
 // Watchdog: if the heartbeat is overdue while unpaused, any state poll revives it.

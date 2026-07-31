@@ -21,7 +21,7 @@ const COSTS = {
   text:             0.001,  // negligible
 };
 
-const DAILY_CAP_DEFAULT = parseFloat(process.env.DAILY_BUDGET_USD || "10.00");
+const DAILY_CAP_DEFAULT = parseFloat(process.env.DAILY_BUDGET_USD || "50.00");
 
 const B = {
   dailyCapUsd: DAILY_CAP_DEFAULT,
@@ -29,7 +29,7 @@ const B = {
   spentToday: 0,
   spentTotal: 0,
   ledger: [],           // last 200 spends: { ts, kind, cost, note }
-  autoRender: false,    // auto-render defaults OFF
+  autoRender: true,     // stream engine: default ON so continuous auto-capture works
   runLiveUntil: 0,      // demo mode: run-live toggle expires at this epoch
 };
 

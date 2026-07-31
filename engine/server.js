@@ -1227,11 +1227,12 @@ function renderStreamHtml() {
     } catch (e) { /* transient network — try again next tick */ }
   }
 
-  // Initial + periodic refresh. Frame updates every 15s, status every 5s.
+  // Initial + periodic refresh. Frame + status both every 2s for
+  // near-realtime updates as new hidden-camera frames arrive.
   refreshFrame();
   refreshStatus();
-  setInterval(refreshFrame, 15000);
-  setInterval(refreshStatus, 5000);
+  setInterval(refreshFrame, 2000);
+  setInterval(refreshStatus, 2000);
 })();
 </script>
 </body>

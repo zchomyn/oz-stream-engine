@@ -25,15 +25,15 @@ module.exports = {
   PORT: parseInt(process.env.PORT || "8090", 10),
 
   // Sim pacing
-  SLOT_SIM_MINUTES: 15,          // each slot advances 15 sim-minutes
-  SLOT_REAL_MS: 30000,           // one slot every 30s real time (speed control at runtime)
-  DIRECTOR_EVERY_SLOTS: 6,       // director pass scans for highlights every N slots
-  // Stream engine: continuous auto-capture. As soon as one render finishes
-  // another starts. STREAM_PARALLEL controls how many concurrent renders.
-  // Default 2 is a good balance between throughput and API friendliness.
-  // Set STREAM_AUTO_CAPTURE=false to disable auto-capture entirely.
+  // Stream engine: real-time sync. 1 sim-minute per slot, 1 slot per real-
+  // minute — Truman's whole day plays out at real-world pace. If it's 3:47pm
+  // in Seahaven right now, Truman is doing whatever a 3:47pm actually is.
+  SLOT_SIM_MINUTES: 1,
+  SLOT_REAL_MS: 60000,           // 1 slot per real minute
+  DIRECTOR_EVERY_SLOTS: 90,      // director pass every ~90 sim-minutes
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
-  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "4", 10),
+  STREAM_PARALLEL: 1,            // serial by design — next frame is next moment
+  STREAM_REALTIME_SYNC: process.env.STREAM_REALTIME_SYNC !== "false",   // sim clock mirrors real clock
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

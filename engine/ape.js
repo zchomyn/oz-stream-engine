@@ -2089,20 +2089,27 @@ async function startAutoCaptureLoop() {
     return awake[rotationIdx % awake.length];
   };
   const oneWorker = async () => {
+    let lastCapturedSlot = -1;
     while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
       if (W.paused) { await new Promise((r) => setTimeout(r, 2000)); continue; }
+      // Wait for the sim to advance to a new slot before capturing again.
+      // This is what makes the stream sequential: each frame is a NEW moment,
+      // not another angle of the same one.
+      if (W.slot === lastCapturedSlot) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
       const subject = pickSubject();
       if (!subject) { await new Promise((r) => setTimeout(r, 5000)); continue; }
+      const capturedSlot = W.slot;
       try {
         const r = await captureLivingMoment(subject.location);
-        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location}`);
+        if (r?.id) olog(`STREAM: captured ${r.id} of ${subject.name} @ ${subject.location} (slot ${capturedSlot})`);
         else if (r?.error) olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
+        lastCapturedSlot = capturedSlot;
       } catch (e) {
         olog(`STREAM: capture error — ${String(e.message).slice(0, 120)}`);
       }
-      // Tiny pacing so we don't hit the model API in a tight burst if a
-      // render returns instantly (rare, but).
-      await new Promise((r) => setTimeout(r, 250));
     }
   };
   for (let i = 0; i < parallel; i++) oneWorker();
@@ -2216,6 +2223,19 @@ function start() {
     else olog(`SCENE retention (boot): ${mb} MB on disk, ${SCENE_STORE.SCENE_RETENTION_COUNT} scene retention cap (volume ${s.pct}%)`);
   } catch (e) { olog(`ERROR boot retention: ${e.message.slice(0, 140)}`); }
   setSpeed(W.speedMs);
+  // Stream engine: sync to real wall clock. Truman's day should mirror the
+  // viewer's day. If the sim clock drifts more than 60 sim-minutes from real
+  // time (either fresh boot or a long pause), snap it back to now.
+  if (CFG.STREAM_REALTIME_SYNC) {
+    const now = new Date();
+    const realMinutes = now.getHours() * 60 + now.getMinutes();
+    const drift = Math.abs(W.minutes - realMinutes);
+    if (drift > 60 || W.slot === 0) {
+      const prev = clockStr();
+      W.minutes = realMinutes;
+      olog(`STREAM: real-clock sync — was ${prev}, now ${clockStr()} (drift ${drift} min)`);
+    }
+  }
   olog(`BOOT ${CFG.APP_VERSION} — world at day ${W.day} ${clockStr()}, slot ${W.slot}, ${W.paused ? "paused" : "running"}, ${CAMPAIGNS.list().length} campaigns loaded`);
   // Stream engine: kickstart the continuous capture loop.
   if (CFG.STREAM_AUTO_CAPTURE) startAutoCaptureLoop();

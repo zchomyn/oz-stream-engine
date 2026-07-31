@@ -207,4 +207,19 @@ const AGENTS = {
   },
 };
 
+// Ensure every agent has the runtime fields ape.js expects. Some (dayLog,
+// lastSaid, lastAct, image) are populated by the sim as it runs; we just
+// need them to exist as empty defaults so snapshot() doesn't NPE on boot.
+for (const key of Object.keys(AGENTS)) {
+  const a = AGENTS[key];
+  if (!a.dayLog) a.dayLog = [];
+  if (a.lastSaid == null) a.lastSaid = "";
+  if (a.lastAct == null) a.lastAct = "";
+  if (a.image == null) a.image = null;
+  if (!Array.isArray(a.memories)) a.memories = [];
+  if (!Array.isArray(a.inbox)) a.inbox = [];
+  if (!Array.isArray(a.carrying)) a.carrying = [];
+  if (a.think == null) a.think = "";
+}
+
 module.exports = { FACTS, PLACES, MONEY, OBJECTS, AGENTS };

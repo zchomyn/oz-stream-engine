@@ -1240,6 +1240,19 @@ function renderStreamHtml() {
 
 APE.start();
 
+// Portrait bootstrap: on first boot, generate portraits for any cast member
+// that doesn't have one yet. Idempotent — existing portraits are skipped.
+// Runs in background so the sim starts ticking immediately.
+(async () => {
+  try {
+    const PB = require("./portrait_bootstrap");
+    const SAFETY = require("./safety");
+    await PB.bootstrapAll(APE.genImage, SAFETY.safePrompt);
+  } catch (e) {
+    console.error("[portrait-bootstrap] top-level error:", e.message);
+  }
+})();
+
 // Attach WebSocket transport on the same port. Handles /events upgrade.
 // Every BUS emit fans out to connected clients. Session 4b of the rebuild.
 const WS = require("./ws_server");

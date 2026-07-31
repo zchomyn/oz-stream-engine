@@ -1,0 +1,17 @@
+{
+  "name": "ape-stream-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "APE stream fork — Truman lives in Seahaven, streamed 24/7 through hidden cameras.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+engine/node_modules/
+*.log
+.env
+.DS_Store
+engine/data/
+engine/scenes/
+engine/moments/
+engine/dailies/
+engine/sparks/
+engine/campaigns/
+engine/world-state.json
+engine/*.db
+engine/*.db-*

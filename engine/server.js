@@ -1425,6 +1425,36 @@ APE.start();
   } catch (e) {
     console.error("[portrait-bootstrap] top-level error:", e.message);
   }
+  // Plate curator: once portraits are done, bank canonical set photos for
+  // every Seahaven location. 3 candidates per location, LLM picks the best,
+  // locked into BIBLE. Idempotent so this only fires for missing plates.
+  try {
+    const PC = require("./plate_curator");
+    const LOCATIONS = require("./locations");
+    const P = require("./prompts");
+    const SAFETY = require("./safety");
+    const BIBLE = require("./bible");
+    const CFG = require("./config");
+    // plateId lives in ape.js — replicate the logic here.
+    const plateId = (loc) => "set_" + String(loc || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    await PC.bankAllPlates({
+      BIBLE, LOCATIONS, plateId,
+      platePrompt: P.platePrompt,
+      genImage: APE.genImage,
+      gemini: APE.callGemini || null,   // may be undefined; passed through
+      safePrompt: SAFETY.safePrompt,
+      olog: (m) => console.log("[plate-curator]", m),
+      textModel: CFG.TEXT_MODEL,
+      candidatesPerPlate: 3,
+      spacingMs: 4000,
+    });
+    APE.W.__bootBootstrapsComplete = true;
+    console.log("[boot] bootstraps complete — auto-capture worker released");
+  } catch (e) {
+    console.error("[plate-curator] top-level error:", e.message);
+    // Even on error, release the gate so the stream can attempt to work
+    APE.W.__bootBootstrapsComplete = true;
+  }
 })();
 
 // Attach WebSocket transport on the same port. Handles /events upgrade.

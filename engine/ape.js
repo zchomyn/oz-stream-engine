@@ -1510,17 +1510,19 @@ async function captureLivingMoment(rawLocation) {
     ? `\nOBJECTS ACTIVE IN THIS FRAME (must appear with these exact states — this is world memory):\n${relevantObjects.map((o) => `- ${o.name}${o.state ? ` — ${o.state}` : ""}`).join("\n")}`
     : "";
 
-  const promptText = `HIDDEN CAMERA CAPTURE. This is a still frame pulled from a covert security camera. Not a photograph, not a cinematographer's shot. The subjects do not know they are being observed.
+  const promptText = `A hidden-camera frame of a specific moment in a specific place with specific people. The FIRST reference image is the DEFINITIVE room — you must match its architecture, wall color, furniture positions, floor pattern, and lighting fixtures EXACTLY. The REMAINING reference images are the DEFINITIVE faces of the people — match their facial structure, hair, skin, build EXACTLY.
+
+DO NOT invent a different room. DO NOT invent different faces. DO NOT invent different furniture. The references are LOCKED. You compose only what these specific people are DOING in this exact room right now.
 
 SCENE: ${sceneDescriptor}
 
-TIME OF DAY (this frame must read visually as this time — the model must render lighting, sky visible through windows, whether interior lamps are on, whether shadows are hard or soft):
+TIME OF DAY (adjust room lighting to match — window light, lamps on/off, warmth of light — but architecture stays the same):
 ${clockStr()} on Day ${W.day}. ${atmosphere}
 
-WHO IS HERE (match the reference photographs of each person exactly — face, hair, build, skin):
+WHO IS HERE:
 ${identities.map((id) => `- ${id.name}`).join("\n")}
 
-WHAT THEY ARE DOING RIGHT NOW (render this moment, not a different one):
+WHAT THEY ARE DOING RIGHT NOW:
 ${activityLines.map((l) => "- " + l).join("\n")}
 ${antiRepeat}
 ${objectsBlock}
@@ -1532,18 +1534,38 @@ ${CCTV.cctvAestheticBlock(cam)}
 FRAMING SAFETY (non-negotiable):
 - Never crop a person at chest level with bare skin above the crop.
 - If framing shows someone behind a counter, table, or piece of furniture, their clothing must be clearly visible above the crop edge.
-- Bodies must not clip or intersect with counters, tables, or walls — a person is either fully in front of or fully behind furniture, never merged into it.
+- Bodies must not clip or intersect with counters, tables, or walls.
 - Hands and fingers must render cleanly, correct count, natural anatomy.
 
-Render a single hidden-camera frame that captures ${namedOccupants} in this room at this moment — the way a security camera would happen to catch them, not the way a photographer would compose it.`;
+Render this specific moment: ${namedOccupants} in this exact room from the reference, doing what's described above.`;
 
   parts.push({ text: SAFETY.safePrompt(promptText) });
 
-  // 8. Render.
+  // 8. Render — multi-candidate with LLM picking best.
   try {
-    const img = await genImage(parts);
-    if (!img) return { error: "model returned no image" };
-    const bytes = Buffer.from(img.data, "base64");
+    const PC = require("./plate_curator");
+    // Strip the trailing text prompt from the parts array so renderCandidates
+    // can re-add it fresh per candidate; refParts is just the images.
+    const refParts = parts.slice(0, -1);
+    const candidateCount = CFG.STREAM_CANDIDATES_PER_FRAME || 3;
+    const candidates = await PC.renderCandidates(
+      genImage, promptText, refParts, SAFETY.safePrompt,
+      candidateCount, CFG.IMAGE_SPACING_MS || 1000
+    );
+    if (!candidates.length) return { error: "no candidates rendered" };
+
+    let chosen = candidates[0];
+    let pickReason = "only candidate";
+    if (candidates.length > 1) {
+      const criteria = `A hidden-camera frame of ${namedOccupants} at ${location} in Seahaven, ${clockStr()}. The chosen candidate must: (a) show the described people (matching their reference portraits), (b) render the room matching the plate reference, (c) have believable lighting for the time of day, (d) have no anatomy errors (extra fingers, warped faces, merged bodies), (e) be composed as a natural hidden-camera capture (off-center, cropped, unposed) — not a portrait, not a movie still. The chosen frame will be part of a continuous stream, so architectural consistency with the plate is important.`;
+      const pick = await PC.pickBest(gemini, CFG.TEXT_MODEL, candidates, criteria);
+      if (pick) {
+        chosen = candidates[pick.index];
+        pickReason = pick.reason;
+        olog(`STREAM: picked candidate ${pick.index + 1}/${candidates.length} for ${namedOccupants} @ ${location} — ${pickReason.slice(0, 80)}`);
+      }
+    }
+    const bytes = Buffer.from(chosen.b64, "base64");
 
     // 9. Store as a first-class moment artifact.
     const id = MOMENT_STORE.newId();
@@ -1556,6 +1578,8 @@ Render a single hidden-camera frame that captures ${namedOccupants} in this room
       time: clockStr(),
       actors: identities.map((i) => i.name),
       activityLines,
+      pickReason,
+      candidateCount: candidates.length,
       // Stream engine: which hidden camera caught this moment. Displayed on
       // the public stream viewer as CAM label.
       camLabel: cam.label,
@@ -2282,6 +2306,12 @@ async function startAutoCaptureLoop() {
     // Track the last 5 subject+action pairs so the director enforces variety
     const recentDirectorSignals = [];
     while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
+      // Wait for boot bootstraps to finish — portraits and plates must be
+      // in BIBLE before we render captures against them.
+      if (!W.__bootBootstrapsComplete) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
       if (W.paused) { await new Promise((r) => setTimeout(r, 2000)); continue; }
       if (W.slot !== currentGateSlot) {
         capturedThisSlot.clear();
@@ -2795,7 +2825,7 @@ function shotImage(sparkId, idx) {
 }
 
 module.exports = {
-  W, CFG, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, genImage, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS,
+  W, CFG, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, callGemini: gemini, genImage, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS,
   autoResume: () => { if (W.paused) { W.paused = false; runSlot().catch((e) => olog(`ERROR beat(autoResume): ${String(e.message).slice(0, 140)}`)); olog("world auto-resumed by campaign start"); } },
   worldPaused: () => W.paused,
   control: {

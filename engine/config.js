@@ -36,6 +36,7 @@ module.exports = {
   STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),
   STREAM_REALTIME_SYNC: process.env.STREAM_REALTIME_SYNC !== "false",
   STREAM_PLAYBACK_MS: parseInt(process.env.STREAM_PLAYBACK_MS || "6000", 10),   // consumer tick
+  STREAM_CANDIDATES_PER_FRAME: parseInt(process.env.STREAM_CANDIDATES_PER_FRAME || "3", 10),  // renders per beat
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

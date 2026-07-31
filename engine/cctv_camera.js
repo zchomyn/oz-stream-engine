@@ -193,29 +193,19 @@ function cameraMeta(location, day, timeStr, activityContext = "") {
 // usual cinematic framing. What this instructs the model to do:
 function cctvAestheticBlock(cameraMeta) {
   return `
-CAMERA FRAMING (this is a hidden-camera capture, not a cinematographer's shot):
-- POSITION: ${cameraMeta.describe}
-- Never a composed shot. Never eye-level. Never on-axis with any character. The character is unaware of being observed.
-- Foreground may partially obscure the subject: a doorframe edge, a plant leaf, a book spine, a lamp shade. Embrace this — it makes the surveillance feel real.
-- Subject may be off-center, cropped by the frame edge, or captured mid-motion. Not posed.
+POST-PROCESSING PASS (apply these effects to the composed scene — do not let them change the scene itself):
+- Very slight fisheye barrel distortion at the frame edges.
+- Faint horizontal scan lines visible across the frame.
+- Fine luminance grain in shadow areas.
+- Mild chromatic aberration on high-contrast edges (very slight).
+- Slight vignette darkening at the corners: ${cameraMeta.describe.match(/vignette/i) ? cameraMeta.describe : "gentle radial darkening at the four corners of the frame"}.
+- Overall color is NEUTRAL — do NOT push warm, do NOT push cool. Whatever palette the room's lighting already has is what the camera captures.
 
-SENSOR CHARACTERISTICS:
-- Slight fisheye barrel distortion (subtle at center, more pronounced at edges).
-- Mild chromatic aberration at frame edges (very slight cyan/red fringing where high-contrast lines meet).
-- Sensor noise — a fine layer of luminance grain, more visible in shadows.
-- Low dynamic range — highlights clip slightly. Shadows crush slightly to dark gray, not pure black.
-- Very faint horizontal scan lines running the height of the frame, barely visible.
+TIMESTAMP OVERLAY (burn into the bottom-right corner):
+- Small, blocky white monospaced text, faint drop-shadow.
+- Text: "${cameraMeta.stampText}"
 
-COLOR:
-- Neutral color rendering. Do NOT apply a warm cast, do NOT push toward yellow-orange, do NOT push toward teal. Colors present but slightly desaturated. The scene's own lighting (whether daylight through a window or evening lamps) determines warmth — the camera itself is neutral.
-
-TIMESTAMP OVERLAY (burn into the bottom-right corner of the frame):
-- Small, blocky white monospaced text with a thin drop-shadow.
-- Exact text: "${cameraMeta.stampText}"
-- Do not stylize the timestamp — it looks like it came from cheap 1998 CCTV firmware.
-
-OVERALL:
-- A hidden camera in a real room. The subject does not know they are on camera.`;
+The frame is a natural, unposed hidden-camera capture. The subject does not know they are being observed. But the composition and the room and the people are DETERMINED BY THE REFERENCE IMAGES — this post pass only adds surveillance texture over what's already there.`;
 }
 
 // Full wrapper — combines a base SCENE description with the CCTV aesthetic.

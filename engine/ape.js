@@ -16,6 +16,7 @@ const PROMISE = require("./promise_scorer");
 const MEDIA = require("./media_plan");
 const PRODUCT_PLAN = require("./product_plan");
 const CCTV = require("./cctv_camera");
+const TIME_OF_DAY = require("./time_of_day");
 const DAILIES = require("./dailies");
 const METERS = require("./meters");
 const CHORES = require("./chores");
@@ -1366,11 +1367,12 @@ async function captureLivingMoment(location) {
         const brand = brandCampaign.brand.toLowerCase();
         return String(a.location || "").toLowerCase().includes(brand);
       }
-      // Regular location matching: use resolveKey to normalize both sides.
-      // Location strings from schedule() include things like "biking to
-      // Ubisoft along the canal" while the cockpit passes cleaner keys.
+      // Both locations must resolve to the SAME non-null canonical key.
+      // Prevents null===null false matches from putting unrouted agents in
+      // Truman's kitchen.
       const agentKey = LOCATIONS.resolveKey(a.location);
       const requestedKey = LOCATIONS.resolveKey(location) || requestedLower;
+      if (!agentKey || !requestedKey) return false;
       return agentKey === requestedKey;
     })
     .map(([id, a]) => ({ id, agent: a }));
@@ -1429,7 +1431,7 @@ async function captureLivingMoment(location) {
   const plateB64 = await ensurePlate(location);
   const locMeta = LOCATIONS.get(location);
   const locDescription = locMeta?.description || location;
-  const sceneDescriptor = `${locDescription}, in Seahaven, at ${clockStr()} on Day ${W.day}. The room's architecture matches the first reference image exactly.`;
+  const sceneDescriptor = `${locDescription}, in Seahaven. The FIRST REFERENCE IMAGE is the canonical, permanent look of this room — furniture positions, wall color, window placement, floor pattern, permanent fixtures must all match it exactly. Do not invent different walls, different furniture, a different floor. This is the same room every time.`;
 
   // 7. Assemble the model input.
   const parts = [];
@@ -1438,10 +1440,24 @@ async function captureLivingMoment(location) {
 
   const namedOccupants = identities.map((id) => id.name).join(", ");
   // Stream engine: wrap in CCTV aesthetic. The camera position is picked
-  // based on location AND what's happening — mug cam when drinking coffee,
-  // coat button cam when walking to work, newsprint cam when reading, etc.
-  const activityContext = activityLines.join(" ");
+  // based on location AND what THIS SUBJECT is doing right now — mug cam
+  // when THEY are drinking coffee, coat button cam when THEY are walking,
+  // newsprint cam when THEY are reading. Not the merged activity of every
+  // person in the room.
+  const subjectAgent = identities[0] ? occupants.find(({ agent }) => agent.name === identities[0].name)?.agent : null;
+  const activityContext = subjectAgent
+    ? `${subjectAgent.lastAct || ""} ${subjectAgent.lastSaid || ""} ${subjectAgent.think || ""}`
+    : activityLines[0] || "";
   const cam = CCTV.cameraMeta(location, W.day, clockStr(), activityContext);
+
+  // Stream engine: mutate object states based on current time of day so the
+  // world reflects the actual hour — coffee empties by 10am, TV off during
+  // work hours, blinds closed at night, rain slicker gone during the workday.
+  // Idempotent: safe to call every capture; overwrites states in place.
+  TIME_OF_DAY.applyTimeStates(W.objects, worldHour, W.env?.weather || "clear");
+
+  // Atmosphere descriptor — lighting, sky, shadow language for the model.
+  const atmosphere = TIME_OF_DAY.atmosphereFor(worldHour, W.env?.weather || "clear");
 
   // Stream engine: world memory. Objects visible at this location must appear
   // with their current state. Coffee cup was full → now half-full. Coat on
@@ -1455,6 +1471,9 @@ async function captureLivingMoment(location) {
   const promptText = `HIDDEN CAMERA CAPTURE. This is a still frame pulled from a covert security camera. Not a photograph, not a cinematographer's shot. The subjects do not know they are being observed.
 
 SCENE: ${sceneDescriptor}
+
+TIME OF DAY (this frame must read visually as this time — the model must render lighting, sky visible through windows, whether interior lamps are on, whether shadows are hard or soft):
+${clockStr()} on Day ${W.day}. ${atmosphere}
 
 WHO IS HERE (match the reference photographs of each person exactly — face, hair, build, skin):
 ${identities.map((id) => `- ${id.name}`).join("\n")}

@@ -145,9 +145,20 @@ function pickCamera(location, activityContext = "") {
     let score = 1;
     if (isHome && cam.outdoor) score = 0;
     else if (isOutdoor && cam.homeOnly) score = 0;
+    // Object cams start at LOWER baseline so they only win when their
+    // trigger words actually match. Prevents mug cam firing on Cal because
+    // his day-log has "coffee" somewhere in it.
+    if (cam.objectCam) score = 0.3;
     if (cam.triggerWords && score > 0) {
       const hits = cam.triggerWords.filter((w) => ctx.includes(w)).length;
-      if (hits > 0) score += hits * 10;
+      // Boost proportional to hits, but require 2+ hits for object cams to
+      // dominate — 1 hit is easy to get spuriously.
+      if (cam.objectCam) {
+        if (hits >= 2) score += 12;
+        else if (hits === 1) score += 1;
+      } else if (hits > 0) {
+        score += hits * 5;
+      }
     }
     return { cam, score };
   }).filter((s) => s.score > 0);

@@ -80,6 +80,41 @@ const LOCATIONS = {
     indoor: false, home: false,
     description: "Chester Street — a quieter residential street where Angela lives. Older homes, larger lots, a magnolia tree on her front lawn.",
   },
+
+  // Supporting-cast homes and routes. These exist as valid resolve targets
+  // so agents don't fall through to null and get grouped with whoever's at
+  // Truman's location.
+  "larry's house":          { indoor: true, home: false, description: "Larry Whitmer's modest cape cod at the end of Elm Street" },
+  "ferris's house":         { indoor: true, home: false, description: "Mr. Ferris's colonial on Sycamore Road" },
+  "doris's apartment":      { indoor: true, home: false, description: "Doris Callahan's small apartment above the Seahaven Drug Store" },
+  "cal's route":            { indoor: false, home: false, description: "Cal Fenwick walking his USPS route through Seahaven" },
+  "cal's route (upper lancaster)":  { indoor: false, home: false, description: "Cal on the upper end of Lancaster Square" },
+  "cal's route (market street)":    { indoor: false, home: false, description: "Cal on Market Street delivering to the storefronts" },
+  "cal's route (chester and points north)": { indoor: false, home: false, description: "Cal on Chester Street and beyond" },
+  "the paperboy dispatch":  { indoor: true, home: false, description: "the small newspaper drop shed behind the Seahaven Chronicle office" },
+  "the paper route":        { indoor: false, home: false, description: "Timmy Kessler on his red bike, tossing rolled Chronicles onto porches" },
+  "seahaven elementary":    { indoor: true, home: false, description: "Seahaven Elementary School classroom" },
+  "rex's house":            { indoor: true, home: false, description: "Rex Whitlock's bungalow on Sycamore Road" },
+  "rex's barbershop":       { indoor: true, home: false, description: "Rex's Barbershop on Market Street — striped pole, two chairs, mirrored wall" },
+  "opening rex's barbershop": { indoor: true, home: false, description: "Rex opening the shop for the day — flipping the closed sign, sweeping the entry" },
+  "esther's house":         { indoor: true, home: false, description: "Esther Pritchett's small tidy cottage on Chester Street" },
+  "hank's house":           { indoor: true, home: false, description: "Hank Deveraux's small clapboard house near the harbor" },
+  "marlon's apartment":     { indoor: true, home: false, description: "Marlon Jenkins's small apartment above the auto parts store" },
+  "seahaven community hospital": { indoor: true, home: false, description: "Seahaven Community Hospital — a small mid-century building" },
+
+  // Transitional walking states — outdoor so home cameras won't fire on them
+  "walking to work along market street":  { indoor: false, home: false, description: "Truman walking east down Market Street toward Seahaven Mutual" },
+  "walking home from work":               { indoor: false, home: false, description: "Truman walking west down Market Street toward home" },
+  "walking to the hospital":              { indoor: false, home: false, description: "Meryl walking toward the hospital" },
+  "walking home from the hospital":       { indoor: false, home: false, description: "Meryl walking home from the hospital shift" },
+  "walking to the harbor":                { indoor: false, home: false, description: "Hank walking down to the harbor" },
+  "walking to seahaven mutual":           { indoor: false, home: false, description: "Mr. Ferris walking to work" },
+  "walking to the good time café":        { indoor: false, home: false, description: "Doris walking her short commute to the café" },
+  "walking home from the café":           { indoor: false, home: false, description: "Doris walking home from her shift" },
+  "walking to the park with the bread bag": { indoor: false, home: false, description: "Esther walking to the park with her bread bag" },
+  "walking home from the park":           { indoor: false, home: false, description: "Esther walking home from the park bench" },
+  "restocking route (kaiser chicken vending)": { indoor: false, home: false, description: "Marlon in his Kaiser Chicken truck restocking vending machines" },
+  "lunch at his desk":                    { indoor: true, home: false, description: "Mr. Ferris at his desk with a sandwich from home" },
 };
 
 // resolveKey — take a raw location string and return the canonical key, or
@@ -87,23 +122,28 @@ const LOCATIONS = {
 function resolveKey(rawLocation) {
   if (!rawLocation) return null;
   const s = String(rawLocation).toLowerCase().trim();
+  // Exact match first — every canonical location wins immediately
   if (LOCATIONS[s]) return s;
-  // Fuzzy match: substring against the KEYS values.
-  for (const k of Object.values(KEYS)) {
-    if (s.includes(k)) return k;
-  }
-  // Common variants
+  // Common variants that stream schedule doesn't always spell canonically
   if (/^bedroom|master bedroom/.test(s)) return "master bedroom";
   if (/^kitchen/.test(s)) return "kitchen";
   if (/^living/.test(s)) return "living room";
   if (/^bath/.test(s)) return "bathroom";
   if (/^hall|entry/.test(s)) return "front hallway";
   if (/^porch|step/.test(s)) return "front step";
-  if (/mutual|insurance|office/.test(s)) return "seahaven mutual";
-  if (/café|cafe|diner|good time/.test(s)) return "the good time café";
-  if (/harbor|pier|bay|dock/.test(s)) return "seahaven harbor";
-  if (/park|bandstand|pond/.test(s)) return "seahaven park";
-  if (/grocer|market|supermarket/.test(s)) return "grocery";
+  if (/mutual|insurance|office/.test(s) && !s.includes("post")) return "seahaven mutual";
+  if (/good time|café|cafe|diner/.test(s)) return "the good time café";
+  if (/harbor|pier|seawall/.test(s)) return "seahaven harbor";
+  if (/park|bandstand|pond|duck/.test(s)) return "seahaven park";
+  if (/grocer|supermarket|seahaven grocer/.test(s)) return "grocery";
+  if (/barbershop|barber shop/.test(s)) return "rex's barbershop";
+  if (/hospital/.test(s)) return "seahaven community hospital";
+  if (/elementary|school/.test(s)) return "seahaven elementary";
+  if (/paper route|paperboy/.test(s)) return "the paper route";
+  if (/mail|route.*mail|postal/.test(s)) return "cal's route";
+  if (/restocking|kaiser chicken/.test(s)) return "restocking route (kaiser chicken vending)";
+  // No match — return null. The caller decides what to do; occupants filter
+  // will now correctly exclude an agent whose location doesn't resolve.
   return null;
 }
 

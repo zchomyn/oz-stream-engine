@@ -1039,6 +1039,36 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     // 3) DIRECTOR (novelty-gated) every N slots
     if (W.slot % CFG.DIRECTOR_EVERY_SLOTS === 0) await directorPass();
 
+    // STREAM ENGINE: auto-capture every N slots. Picks a subject (Truman
+    // first if awake; otherwise any awake character) and captures a hidden-
+    // camera frame of wherever they are right now. Fire-and-forget so the
+    // ~20-40s render doesn't block the tick. If the previous capture is
+    // still rendering when we hit this again, we skip this cycle.
+    if (!W.__autoCaptureInFlight && W.slot % CFG.AUTO_CAPTURE_EVERY_SLOTS === 0) {
+      const truman = W.agents.truman;
+      let subject = null;
+      if (truman && !truman.asleep) subject = truman;
+      else {
+        for (const [id, a] of Object.entries(W.agents)) {
+          if (!a.asleep) { subject = a; break; }
+        }
+      }
+      if (subject) {
+        W.__autoCaptureInFlight = true;
+        (async () => {
+          try {
+            const r = await captureLivingMoment(subject.location);
+            if (r?.id) olog(`STREAM: auto-captured ${r.id} of ${subject.name} at ${subject.location}`);
+            else if (r?.error) olog(`STREAM: auto-capture skipped — ${String(r.error).slice(0, 120)}`);
+          } catch (e) {
+            olog(`STREAM: auto-capture error — ${String(e.message).slice(0, 120)}`);
+          } finally {
+            W.__autoCaptureInFlight = false;
+          }
+        })();
+      }
+    }
+
     // 4) REFLECT nightly
     if (W.minutes >= CFG.REFLECT_HOUR * 60 && W.reflectedDay !== W.day) { W.reflectedDay = W.day; await reflectAll(); }
 

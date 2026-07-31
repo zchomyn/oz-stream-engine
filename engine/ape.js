@@ -1358,11 +1358,24 @@ async function renderObjectFocus(location, objectDescriptor) {
 //
 // Returns { id, path, meta } on success, or { error } if no one is there
 // or a render call fails.
-async function captureLivingMoment(location) {
+async function captureLivingMoment(rawLocation) {
   // 0. Volume headroom check — moments are persistent artifacts, don't spend
   // if the disk can't safely hold them.
   const room = STORAGE.checkRenderHeadroom();
   if (!room.ok) return { error: room.reason };
+
+  // Normalize the location through resolveKey so every capture at "the good
+  // time café", "good time cafe", "Good Time Café" all hit the same plate.
+  // Reject transitional walking states — you can't take a hidden-camera
+  // frame of "walking home" since it's not a room.
+  const canonicalKey = LOCATIONS.resolveKey(rawLocation);
+  if (!canonicalKey) {
+    return { error: `unroutable location "${rawLocation}"` };
+  }
+  if (canonicalKey.startsWith("walking ") || canonicalKey.includes("route")) {
+    return { error: `transitional state "${canonicalKey}" — no scene to capture` };
+  }
+  const location = canonicalKey;
 
   // 1. Find everyone at this location right now.
   const worldHour = W.minutes / 60;
@@ -2297,10 +2310,19 @@ async function startAutoCaptureLoop() {
       capturedThisSlot.add(dedupKey);
 
       try {
-        const r = await captureLivingMoment(pick.agent.location);
+        const rawLoc = pick.agent.location;
+        const canonicalKey = LOCATIONS.resolveKey(rawLoc);
+        // If the pick is in a transitional state (walking, on route), skip
+        // this pick and let the next tick pick again. Someone else will be
+        // in a real room.
+        if (!canonicalKey || canonicalKey.startsWith("walking ") || canonicalKey.includes("route")) {
+          olog(`STREAM: skip ${pick.agent.name} — transitional ("${rawLoc}")`);
+          await new Promise((r) => setTimeout(r, 500));
+          continue;
+        }
+        const r = await captureLivingMoment(canonicalKey);
         if (r?.id) {
-          olog(`STREAM: captured ${r.id} of ${pick.agent.name} @ ${pick.agent.location} · score ${pick.score} · buffer ${bufStat.backlog + 1}/${STREAM_BUFFER.BUFFER_TARGET}`);
-          // Log this pick so the director's variety guard sees it next time
+          olog(`STREAM: captured ${r.id} of ${pick.agent.name} @ ${canonicalKey} · score ${pick.score} · buffer ${bufStat.backlog + 1}/${STREAM_BUFFER.BUFFER_TARGET}`);
           recentDirectorSignals.push({
             subjectKey: pick.key,
             actNormalized: String(pick.agent.lastAct || "")

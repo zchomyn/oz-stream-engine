@@ -1253,6 +1253,15 @@ function renderStreamHtml() {
     .chat-said::after { content: '\\201D'; color: #888; margin-left: 2px; }
     .chat-thought { color: #a4a4a4; font-style: italic; font-size: 12px; }
     .chat-thought::before { content: '~ '; color: #666; }
+    .chat-system {
+      color: #6b6b6b;
+      font-size: 9.5px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 4px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.05);
+      animation: fadeIn 0.3s ease-in;
+    }
     #chat-sidebar.hidden { display: none; }
     /* On narrower screens, hide the sidebar entirely for now */
     @media (max-width: 768px) {
@@ -1299,6 +1308,20 @@ function renderStreamHtml() {
   let lastMomentId = null;
   let lastMomentAt = Date.now();
   const seenChatKeys = new Set();
+
+  function appendSystem(day, clock, subject, location, cam) {
+    const entry = document.createElement('div');
+    entry.className = 'chat-system';
+    const parts = [];
+    if (clock) parts.push('DAY ' + day + ' · ' + clock);
+    if (subject) parts.push(subject.toUpperCase());
+    if (location) parts.push('at ' + location.toUpperCase());
+    if (cam) parts.push('· ' + cam);
+    entry.textContent = parts.join(' · ');
+    chatFeedEl.appendChild(entry);
+    while (chatFeedEl.children.length > 30) chatFeedEl.removeChild(chatFeedEl.firstChild);
+    chatFeedEl.scrollTop = chatFeedEl.scrollHeight;
+  }
 
   function appendChat(who, kind, text) {
     if (!text) return;
@@ -1358,6 +1381,9 @@ function renderStreamHtml() {
         lastMomentAt = Date.now();
         refreshFrame();
         renderingChipEl.classList.remove('visible');
+        // System entry — always appended per new frame. Shows chronology of
+        // what the stream is following even when the agent hasn't changed.
+        appendSystem(d.day, d.clock, d.subject, d.subjectLocation, d.camLabel);
         // Populate chat sidebar with this frame's thoughts + spoken lines
         if (Array.isArray(d.thoughts)) {
           for (const t of d.thoughts) {

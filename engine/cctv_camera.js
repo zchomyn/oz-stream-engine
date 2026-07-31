@@ -38,76 +38,84 @@ const CAM_POSITIONS = [
   {
     id: "plant-cam",
     label: "PLANT CAM",
-    describe: "Camera concealed inside a decorative houseplant. Leaves partially crop the frame edges as soft green vignette. Low angle, looking upward slightly.",
+    describe: "Camera concealed inside a decorative houseplant. A few blurred green leaves partially crop the frame edges as a soft vignette. Low angle, looking upward slightly toward the room's activity.",
     homeOnly: true,
   },
-  // Object-hidden cameras — the Truman Show POV shots
+  // Object-hidden cameras — the Truman Show POV shots.
+  // IMPORTANT: describes the CAMERA and its viewport only. Do NOT describe
+  // what the camera happens to be seeing (coffee, ears, faces) because Nano
+  // Banana treats that as scene content and paints it into every frame.
   {
     id: "coffee-mug",
     label: "MUG CAM",
-    describe: "Camera hidden inside a coffee mug or cup, lens looking UP through the coffee toward the drinker's face. Warm brown liquid ripples visible around the edges of the frame. Extreme close-up of a mouth, chin, tip of the nose from below. Only visible when someone is drinking.",
+    // Camera describe: aperture and vignette shape only. Model must not add
+    // coffee to scenes where the subject isn't drinking.
+    describe: "Camera lens fitted flush into the base of a ceramic drinking vessel on a table or counter. Restricted circular viewport looking upward from tabletop level. Frame edges show a soft dark ring where the vessel's inner rim vignettes the view.",
     homeOnly: false,
     objectCam: true,
-    triggerWords: ["coffee", "mug", "drink", "sip", "carafe"],
+    // Verb gate: subject's action must START with drink/sip/pour to activate.
+    verbGate: ["drink", "sip", "pour", "raises", "lifts", "reaches for the mug"],
   },
   {
     id: "phone-receiver",
     label: "PHONE CAM",
-    describe: "Extreme close-up camera hidden in a phone receiver. When the phone is picked up, we see an ear, side of a face, hair, a jawline. Warm plastic curvature crops the frame. Only shows when someone is on the phone.",
+    describe: "Camera embedded in a telephone handset. Restricted viewport with a curved plastic vignette on one side. Only activates when the receiver is picked up.",
     homeOnly: false,
     objectCam: true,
-    triggerWords: ["phone", "call", "receiver"],
+    verbGate: ["answers the phone", "picks up the phone", "phone rings", "on the phone", "calls", "dials"],
   },
   {
     id: "mirror-behind",
     label: "MIRROR CAM",
-    describe: "Two-way mirror camera in the bathroom or bedroom. Subject looks directly at the camera without knowing — grooming, checking their teeth, adjusting their hair. Slight ghost double-image from mirror surface. Sink or dresser visible below the frame edge.",
+    describe: "Camera behind a two-way mirror. Faint doubled-image ghosting from the mirror surface visible in the frame. Wall-mounted, chest-to-head height, looking outward into the room from a mirror's position.",
     homeOnly: true,
   },
   {
     id: "wristwatch",
     label: "WATCH CAM",
-    describe: "Camera hidden in the face of a wristwatch. The frame is a small circle vignette. What we see is whatever the wrist is pointing at — the surface of a desk, a newspaper, a plate of food, someone's shoulder. Watch hands may be faintly visible as translucent overlays.",
+    describe: "Camera embedded in the crown of a wristwatch. Very small circular vignette. Only activates when the wearer's wrist is raised toward their face or an object.",
     homeOnly: false,
     objectCam: true,
+    verbGate: ["checks the time", "looks at his watch", "raises his wrist", "consults the watch"],
   },
   {
     id: "coat-button",
     label: "BUTTON CAM",
-    describe: "Camera hidden inside a coat button, chest-height on the wearer, looking forward. Whatever the wearer is looking at, we see. Slight round vignette. Very low resolution feel — this is the cheapest camera in the network.",
+    describe: "Camera lens flush-mounted in the second button of a coat. Very small forward-facing viewport at chest height. Only activates while the coat is worn.",
     homeOnly: false,
     objectCam: true,
-    triggerWords: ["coat", "jacket", "walking", "office", "outside"],
+    verbGate: ["walking to work", "walking home", "walking down", "walking along", "walking through"],
   },
   {
     id: "newspaper-header",
     label: "NEWSPRINT CAM",
-    describe: "Camera embedded in the masthead of the Seahaven Chronicle newspaper. When someone reads the paper, we see their face from below the page — eyes moving across the columns, sometimes their mouth. Grainy newsprint texture around the frame edges.",
+    describe: "Camera embedded in the masthead of a newspaper. Only activates when the paper is held open in reading position. Curved paper edges vignette the frame.",
     homeOnly: false,
     objectCam: true,
-    triggerWords: ["newspaper", "chronicle", "read", "paper"],
+    verbGate: ["reads the paper", "reading the newspaper", "unfolds the chronicle", "opens the paper"],
   },
   {
     id: "picture-frame",
     label: "FRAME CAM",
-    describe: "Camera hidden behind the glass of a framed photograph (the sailboat photo, the wedding photo). Slight reflection ghost on the frame. Angle looking out into the room from a fixed spot on the mantel or wall.",
+    describe: "Camera hidden behind the glass of a framed photograph on a wall or mantel. Slight reflection ghosting on the frame. Angle looking outward into the room from a fixed spot.",
     homeOnly: true,
   },
   {
     id: "cereal-box",
     label: "CEREAL CAM",
-    describe: "Camera hidden inside a cornflakes or cereal box, looking UP through the top when the box is opened. Extreme low angle of someone pouring cereal from above — box top edges vignette the frame.",
+    describe: "Camera lens fitted into the top of a cardboard cereal box. Only activates when the box is open. Extreme low-angle circular viewport looking upward when someone is pouring from above.",
     homeOnly: true,
     objectCam: true,
-    triggerWords: ["cornflakes", "cereal", "breakfast"],
+    verbGate: ["pours cereal", "opens the cornflakes", "shakes the box"],
   },
   {
     id: "car-radio",
     label: "DASHBOARD CAM",
-    describe: "Camera hidden in a car radio or dashboard. Wide angle capturing the driver from a low front-angle. Steering wheel visible at bottom of frame. Windshield visible top. Sun glare on the interior.",
+    describe: "Camera hidden in an automobile dashboard, forward-angled toward the driver's seat. Steering wheel visible at bottom of frame, windshield visible top. Only activates when the driver is in the car.",
     homeOnly: false,
     outdoor: true,
     objectCam: true,
+    verbGate: ["driving", "in the car", "at the wheel", "starts the engine"],
   },
   {
     id: "streetlight",
@@ -119,13 +127,13 @@ const CAM_POSITIONS = [
   {
     id: "store-corner",
     label: "STORE CAM",
-    describe: "Retail ceiling-corner security camera, black-and-white leaning toward warm cream in the highlights. Very wide angle. Aisles or counters partly visible.",
+    describe: "Retail ceiling-corner security camera. Very wide angle. Aisles or counters partly visible.",
     homeOnly: false,
   },
   {
     id: "clock-face",
     label: "CLOCK CAM",
-    describe: "Camera hidden behind the face of a wall clock. Looks out through a small hole. Circular frame vignette. Center of view sharp, edges blurred.",
+    describe: "Camera hidden behind the face of a wall clock. Looks out through a small hole in the clock face. Circular frame vignette. Center of view sharp, edges blurred.",
     homeOnly: true,
   },
 ];
@@ -140,24 +148,20 @@ function pickCamera(location, activityContext = "") {
   const isOutdoor = outdoorSpots.includes(location);
   const ctx = (activityContext || "").toLowerCase();
 
-  // Score each camera: location gate + trigger-word boost for object cams
+  // Score each camera. Base 1 for non-object cams. Object cams are strict:
+  // they only fire when the subject's action contains one of their verb-gate
+  // phrases as a substring. This prevents mug cam from firing because someone
+  // mentioned coffee somewhere.
   const scored = CAM_POSITIONS.map((cam) => {
     let score = 1;
     if (isHome && cam.outdoor) score = 0;
     else if (isOutdoor && cam.homeOnly) score = 0;
-    // Object cams start at LOWER baseline so they only win when their
-    // trigger words actually match. Prevents mug cam firing on Cal because
-    // his day-log has "coffee" somewhere in it.
-    if (cam.objectCam) score = 0.3;
-    if (cam.triggerWords && score > 0) {
-      const hits = cam.triggerWords.filter((w) => ctx.includes(w)).length;
-      // Boost proportional to hits, but require 2+ hits for object cams to
-      // dominate — 1 hit is easy to get spuriously.
-      if (cam.objectCam) {
-        if (hits >= 2) score += 12;
-        else if (hits === 1) score += 1;
-      } else if (hits > 0) {
-        score += hits * 5;
+    if (cam.objectCam) {
+      // Verb gate: must match one of the exact phrases in ctx or score 0
+      if (!cam.verbGate || !cam.verbGate.some((phrase) => ctx.includes(phrase))) {
+        score = 0;
+      } else {
+        score = 8;   // when it does match, moderately boosted
       }
     }
     return { cam, score };
@@ -192,29 +196,26 @@ function cctvAestheticBlock(cameraMeta) {
 CAMERA FRAMING (this is a hidden-camera capture, not a cinematographer's shot):
 - POSITION: ${cameraMeta.describe}
 - Never a composed shot. Never eye-level. Never on-axis with any character. The character is unaware of being observed.
-- Foreground may partially obscure the subject: a doorframe edge, a plant leaf, a book spine, a lamp shade, a rearview mirror. Embrace this — it makes the surveillance feel real.
+- Foreground may partially obscure the subject: a doorframe edge, a plant leaf, a book spine, a lamp shade. Embrace this — it makes the surveillance feel real.
 - Subject may be off-center, cropped by the frame edge, or captured mid-motion. Not posed.
 
 SENSOR CHARACTERISTICS:
 - Slight fisheye barrel distortion (subtle at center, more pronounced at edges).
-- Mild chromatic aberration at the frame edges (very slight cyan/red fringing where high-contrast lines meet).
+- Mild chromatic aberration at frame edges (very slight cyan/red fringing where high-contrast lines meet).
 - Sensor noise — a fine layer of luminance grain, more visible in shadows.
-- Low dynamic range — highlights clip slightly (a window blows out to pure white; a bright light source glows). Shadows crush slightly to deep gray, not pure black.
+- Low dynamic range — highlights clip slightly. Shadows crush slightly to dark gray, not pure black.
 - Very faint horizontal scan lines running the height of the frame, barely visible.
-- Slight rolling-shutter jelly effect on fast motion (only if applicable).
 
-COLOR GRADE:
-- Warm cast — the cheap sensor runs slightly yellow-orange, especially in shadow tones.
-- Desaturated overall. Not black-and-white — colors present but muted. Skin tones read natural but slightly waxy.
-- No cinematic teal-and-orange. No color-graded darkroom feel. This is a bare sensor.
+COLOR:
+- Neutral color rendering. Do NOT apply a warm cast, do NOT push toward yellow-orange, do NOT push toward teal. Colors present but slightly desaturated. The scene's own lighting (whether daylight through a window or evening lamps) determines warmth — the camera itself is neutral.
 
-TIMESTAMP OVERLAY (burn into the bottom-right corner of the frame, as if the camera firmware wrote it there):
-- Small, blocky white sans-serif or monospaced numeric text with a thin drop-shadow so it stays legible on any background.
+TIMESTAMP OVERLAY (burn into the bottom-right corner of the frame):
+- Small, blocky white monospaced text with a thin drop-shadow.
 - Exact text: "${cameraMeta.stampText}"
-- Do not stylize the timestamp — it should look like it came from cheap 1998 CCTV firmware, not a designer.
+- Do not stylize the timestamp — it looks like it came from cheap 1998 CCTV firmware.
 
-OVERALL FEEL:
-- Someone glancing at this frame should IMMEDIATELY read "security camera footage" — not "movie still," not "photograph," not "documentary." A hidden camera in a real room. The subject does not know they are on camera.`;
+OVERALL:
+- A hidden camera in a real room. The subject does not know they are on camera.`;
 }
 
 // Full wrapper — combines a base SCENE description with the CCTV aesthetic.

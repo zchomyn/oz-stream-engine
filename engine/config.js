@@ -33,7 +33,7 @@ module.exports = {
   // Default 2 is a good balance between throughput and API friendliness.
   // Set STREAM_AUTO_CAPTURE=false to disable auto-capture entirely.
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
-  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),
+  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "4", 10),
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

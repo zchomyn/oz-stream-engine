@@ -57,14 +57,13 @@ function ensureFreshDay() {
   if (B.today !== k) { B.today = k; B.spentToday = 0; persist(); }
 }
 
-// canSpend returns { ok, reason } — check before every generation.
+// Stream engine: no budget gates. Runs on DeepMind experimental token.
+// canSpend() always returns ok. Ledger + tracking still happens for
+// observability (spentToday reflects real ledger entries), but nothing
+// blocks a render.
 function canSpend(kind, overrideCost) {
   ensureFreshDay();
-  const cost = overrideCost != null ? overrideCost : (COSTS[kind] ?? 0);
-  if (cost <= 0) return { ok: true };
-  const remaining = B.dailyCapUsd - B.spentToday;
-  if (cost > remaining) return { ok: false, reason: `daily cap reached — spent $${B.spentToday.toFixed(2)} of $${B.dailyCapUsd.toFixed(2)} (needed $${cost.toFixed(2)})` };
-  return { ok: true, remaining };
+  return { ok: true };
 }
 
 function recordSpend(kind, note = "") {

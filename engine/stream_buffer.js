@@ -27,7 +27,7 @@ const STATE_PATH = path.join(BUFFER_DIR, "state.json");
 // Target buffer size — how many frames producer should stay ahead. 300 frames
 // at 6s per frame = 30 minutes of buffered stream. Producer pauses when
 // buffer holds this many unconsumed frames.
-const BUFFER_TARGET = parseInt(process.env.STREAM_BUFFER_TARGET || "300", 10);
+const BUFFER_TARGET = parseInt(process.env.STREAM_BUFFER_TARGET || "40", 10);
 
 // Retention — how many "already-consumed" frames to keep on disk for
 // reference. Bounded to keep the volume tidy.
@@ -44,6 +44,13 @@ try {
   if (fs.existsSync(STATE_PATH)) {
     STATE = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
     STATE.consumerAdvancedAt = STATE.consumerAdvancedAt || Date.now();
+    // On boot: if the consumer is more than 30 frames behind the producer,
+    // fast-forward it. Prevents restarts from replaying stale buffer content.
+    const staleBacklog = STATE.producerCursor - STATE.consumerCursor;
+    if (staleBacklog > 30) {
+      STATE.consumerCursor = Math.max(0, STATE.producerCursor - 5);
+      console.log(`[stream-buffer] boot fast-forward: consumer jumped ${staleBacklog} → 5 frames behind`);
+    }
   }
 } catch (_) {}
 

@@ -29,8 +29,8 @@ module.exports = {
   // is smooth from buffer at STREAM_PLAYBACK_MS intervals. Producer + consumer
   // are decoupled — sim can churn through Truman's day in real minutes while
   // the viewer sees smooth 6-second playback.
-  SLOT_SIM_MINUTES: 30,          // each slot = 30 sim-min so beats accumulate quickly
-  SLOT_REAL_MS: 3000,            // slot every 3s real time
+  SLOT_SIM_MINUTES: 60,          // each slot = 1 sim-hour so scenes actually move on
+  SLOT_REAL_MS: 3000,            // 1 slot per 3s real (baseline; actual limited by agent turn latency)
   DIRECTOR_EVERY_SLOTS: 3,       // director every ~90 sim-min
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
   STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),

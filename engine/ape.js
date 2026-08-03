@@ -89,7 +89,7 @@ async function callJSON(prompt, schema) {
 
 // ---------------- World state ----------------
 const W = {
-  day: 1, minutes: 6 * 60, slot: 0, paused: true, speedMs: CFG.SLOT_REAL_MS,
+  day: 1, minutes: 6 * 60, slot: 0, paused: false, speedMs: CFG.SLOT_REAL_MS,
   facts: [...SEED.FACTS],
   money: JSON.parse(JSON.stringify(SEED.MONEY)),
   objects: JSON.parse(JSON.stringify(SEED.OBJECTS)),
@@ -2098,7 +2098,10 @@ function hydrateFromDB(dbWorld) {
   W.day = dbWorld.day;
   W.minutes = dbWorld.minutes;
   W.slot = dbWorld.slot;
-  W.paused = !!dbWorld.paused;
+  // Stream engine: ignore persisted paused state. This is a 24/7 stream, not
+  // a research tool where you carefully step through slots. Every boot
+  // starts running so the stream stays alive across restarts.
+  W.paused = false;
   W.speedMs = dbWorld.speed_ms;
   W.busy = false;
   W.rendering = false;

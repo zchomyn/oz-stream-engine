@@ -396,18 +396,27 @@ function schedule(a, id) { // routine gates: who is out / asleep / in transit
   }
 
   // Supporting cast schedules
-  if (id === "larry" && !isWeekend) {
-    if (h >= 8.33 && h < 8.5) return { away: "walking to work along Market Street" };
-    if (h >= 8.5 && h < 12)   return { away: "seahaven mutual" };
-    if (h >= 12 && h < 13)    return { away: "the good time café" };
-    if (h >= 13 && h < 17)    return { away: "seahaven mutual" };
-    if (h >= 17 && h < 17.2)  return { away: "walking home from work" };
+  if (id === "larry") {
+    if (!isWeekend) {
+      if (h >= 8.33 && h < 8.5) return { away: "walking to work along Market Street" };
+      if (h >= 8.5 && h < 12)   return { away: "seahaven mutual" };
+      if (h >= 12 && h < 13)    return { away: "the good time café" };
+      if (h >= 13 && h < 17)    return { away: "seahaven mutual" };
+      if (h >= 17 && h < 17.2)  return { away: "walking home from work" };
+    }
+    // Every other hour Larry is at HIS house, not Truman's
+    if (h >= 6.5 && h < 22.5)   return { away: "larry's house" };
+    return { asleep: true };
   }
-  if (id === "ferris" && !isWeekend) {
-    if (h >= 7.75 && h < 8)   return { away: "walking to seahaven mutual" };
-    if (h >= 8 && h < 12)     return { away: "seahaven mutual" };
-    if (h >= 12 && h < 13)    return { away: "lunch at his desk" };
-    if (h >= 13 && h < 17.5)  return { away: "seahaven mutual" };
+  if (id === "ferris") {
+    if (!isWeekend) {
+      if (h >= 7.75 && h < 8)   return { away: "walking to seahaven mutual" };
+      if (h >= 8 && h < 12)     return { away: "seahaven mutual" };
+      if (h >= 12 && h < 13)    return { away: "lunch at his desk" };
+      if (h >= 13 && h < 17.5)  return { away: "seahaven mutual" };
+    }
+    if (h >= 6.75 && h < 22)    return { away: "ferris's house" };
+    return { asleep: true };
   }
   if (id === "doris") {
     // Café shift 6 days a week — Sunday off
@@ -416,51 +425,64 @@ function schedule(a, id) { // routine gates: who is out / asleep / in transit
       if (h >= 6 && h < 15)    return { away: "the good time café" };
       if (h >= 15 && h < 15.25) return { away: "walking home from the café" };
     }
+    if (h >= 5.5 && h < 22.5)  return { away: "doris's apartment" };
+    return { asleep: true };
   }
-  if (id === "cal" && !isWeekend) {
-    // Route: 6:30-15:30. Pass through Lancaster Square around 8:30.
-    if (h >= 6.25 && h < 6.5)  return { away: "loading up at the post office" };
-    if (h >= 6.5 && h < 8.25)  return { away: "cal's route (upper Lancaster)" };
-    if (h >= 8.25 && h < 8.75) return { away: "lancaster square" };  // Truman sees him here
-    if (h >= 8.75 && h < 12)   return { away: "cal's route (Market Street)" };
-    if (h >= 12 && h < 12.5)   return { away: "the good time café" };
-    if (h >= 12.5 && h < 15.5) return { away: "cal's route (Chester and points north)" };
+  if (id === "cal") {
+    if (!isWeekend) {
+      if (h >= 6.25 && h < 6.5)  return { away: "loading up at the post office" };
+      if (h >= 6.5 && h < 8.25)  return { away: "cal's route (upper Lancaster)" };
+      if (h >= 8.25 && h < 8.75) return { away: "lancaster square" };
+      if (h >= 8.75 && h < 12)   return { away: "cal's route (Market Street)" };
+      if (h >= 12 && h < 12.5)   return { away: "the good time café" };
+      if (h >= 12.5 && h < 15.5) return { away: "cal's route (Chester and points north)" };
+    }
+    if (h >= 5.75 && h < 22)    return { away: "cal's house" };
+    return { asleep: true };
   }
   if (id === "timmy") {
-    // Dawn route every day
     if (h >= 5 && h < 5.25)    return { away: "the paperboy dispatch" };
     if (h >= 5.25 && h < 6.25) return { away: "the paper route" };
-    // School during weekdays
     if (!isWeekend && h >= 8.25 && h < 15.25) return { away: "seahaven elementary" };
+    if (h >= 5 && h < 20.5)     return { away: "timmy's house" };
+    return { asleep: true };
   }
   if (id === "rex") {
-    // Barbershop 6 days — Sunday closed
     if (dow !== 0 && h >= 7.75 && h < 8)  return { away: "opening rex's barbershop" };
     if (dow !== 0 && h >= 8 && h < 12)    return { away: "rex's barbershop" };
     if (dow !== 0 && h >= 12 && h < 13)   return { away: "the good time café" };
     if (dow !== 0 && h >= 13 && h < 17)   return { away: "rex's barbershop" };
+    if (h >= 6.25 && h < 22)              return { away: "rex's house" };
+    return { asleep: true };
   }
   if (id === "hank") {
-    // Harbor every day
     if (h >= 6.75 && h < 7)   return { away: "walking to the harbor" };
     if (h >= 7 && h < 12)     return { away: "seahaven harbor" };
     if (h >= 12 && h < 12.75) return { away: "the good time café" };
     if (h >= 12.75 && h < 17) return { away: "seahaven harbor" };
+    if (h >= 6 && h < 21.5)    return { away: "hank's house" };
+    return { asleep: true };
   }
   if (id === "esther") {
-    // Park bench 9:30-11:00 daily
     if (h >= 9 && h < 9.25)   return { away: "walking to the park with the bread bag" };
     if (h >= 9.25 && h < 11)  return { away: "seahaven park" };
     if (h >= 11 && h < 11.25) return { away: "walking home from the park" };
+    if (h >= 7.5 && h < 21)    return { away: "esther's house" };
+    return { asleep: true };
   }
-
-  const wake = id === "truman" ? 6.75 : id === "meryl" ? 6.5 : id === "marlon" ? 7.25 : id === "angela" ? 7
-    : id === "larry" ? 6.5 : id === "ferris" ? 6.75 : id === "doris" ? 5.5 : id === "cal" ? 5.75
-    : id === "timmy" ? 5 : id === "rex" ? 6.25 : id === "hank" ? 6 : id === "esther" ? 7.5 : 7;
-  const sleep = id === "truman" ? 22.5 : id === "meryl" ? 22 : id === "marlon" ? 23 : id === "angela" ? 22
-    : id === "larry" ? 22.5 : id === "ferris" ? 22 : id === "doris" ? 22.5 : id === "cal" ? 22
-    : id === "timmy" ? 20.5 : id === "rex" ? 22 : id === "hank" ? 21.5 : id === "esther" ? 21 : 22;
-  if (h < wake || h >= sleep) return { asleep: true };
+  if (id === "marlon") {
+    if (!isWeekend && h >= 8 && h < 16) return { away: "restocking route (kaiser chicken vending)" };
+    if (h >= 7.25 && h < 23)   return { away: "marlon's apartment" };
+    return { asleep: true };
+  }
+  if (id === "angela") {
+    if (dow === 2 && h >= 9 && h < 10.5) return { away: "grocery" };
+    // Angela stays at her house all other times — she's not welcome to drift
+    // to Truman's kitchen because of an ambiguous evening slot
+    if (h >= 7 && h < 22)      return { away: "angela's house" };
+    return { asleep: true };
+  }
+  // Fallback for the main cast if none of their specific rules fired above
   return {};
 }
 
@@ -1387,19 +1409,27 @@ async function captureLivingMoment(rawLocation) {
     const brand = (c.brand || "").toLowerCase();
     return brand && requestedLower.includes(brand);
   });
+  const BURBANK_HOME_ROOMS = ["master bedroom", "kitchen", "living room", "bathroom", "front hallway", "front step", "lancaster square"];
+  const BURBANK_RESIDENTS = new Set(["truman", "meryl"]);
   const occupants = Object.entries(W.agents)
-    .filter(([, a]) => {
+    .filter(([id, a]) => {
       if (brandCampaign) {
         const brand = brandCampaign.brand.toLowerCase();
         return String(a.location || "").toLowerCase().includes(brand);
       }
       // Both locations must resolve to the SAME non-null canonical key.
-      // Prevents null===null false matches from putting unrouted agents in
-      // Truman's kitchen.
       const agentKey = LOCATIONS.resolveKey(a.location);
       const requestedKey = LOCATIONS.resolveKey(location) || requestedLower;
       if (!agentKey || !requestedKey) return false;
-      return agentKey === requestedKey;
+      if (agentKey !== requestedKey) return false;
+      // If the target is a Burbank home room, only the Burbank residents can
+      // occupy it. Prevents Larry/Ferris/Timmy/Angela from co-existing in
+      // Truman's kitchen just because their agent turn set their location to
+      // "kitchen" — that's THEIR kitchen, not Truman's.
+      if (BURBANK_HOME_ROOMS.includes(requestedKey) && !BURBANK_RESIDENTS.has(id)) {
+        return false;
+      }
+      return true;
     })
     .map(([id, a]) => ({ id, agent: a }));
 

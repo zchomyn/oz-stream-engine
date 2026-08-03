@@ -100,6 +100,9 @@ const LOCATIONS = {
   "esther's house":         { indoor: true, home: false, description: "Esther Pritchett's small tidy cottage on Chester Street" },
   "hank's house":           { indoor: true, home: false, description: "Hank Deveraux's small clapboard house near the harbor" },
   "marlon's apartment":     { indoor: true, home: false, description: "Marlon Jenkins's small apartment above the auto parts store" },
+  "angela's house":         { indoor: true, home: false, description: "Angela Burbank's tidy cottage on Chester Street — mother of Truman" },
+  "cal's house":            { indoor: true, home: false, description: "Cal Fenwick's small ranch-style home on Elm Street" },
+  "timmy's house":          { indoor: true, home: false, description: "Timmy Kessler's family home — a modest two-story on Pine Street" },
   "seahaven community hospital": { indoor: true, home: false, description: "Seahaven Community Hospital — a small mid-century building" },
 
   // Transitional walking states — outdoor so home cameras won't fire on them

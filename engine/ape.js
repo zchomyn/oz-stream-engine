@@ -18,9 +18,11 @@ const PRODUCT_PLAN = require("./product_plan");
 const CCTV = require("./cctv_camera");
 const TIME_OF_DAY = require("./time_of_day");
 const { StoryEngine } = require("./story_engine");
-// STORY engine singleton is lazily initialized on first use to avoid
+const { WorldLedger } = require("./world_ledger");
+// STORY engine + world LEDGER singletons, lazily initialized to avoid
 // module-init-order tangles with LOG, W, clockStr.
 let STORY = null;
+let LEDGER = null;
 function getStoryEngine() {
   if (STORY) return STORY;
   STORY = new StoryEngine({
@@ -31,6 +33,15 @@ function getStoryEngine() {
   });
   STORY.load().catch(() => {});
   return STORY;
+}
+function getLedger() {
+  if (LEDGER) return LEDGER;
+  LEDGER = new WorldLedger({
+    savePath: path.join(path.dirname(CFG.SAVE_PATH), "world_ledger.json"),
+    olog: (m) => olog(m),
+  });
+  LEDGER.load().catch(() => {});
+  return LEDGER;
 }
 const DAILIES = require("./dailies");
 const METERS = require("./meters");
@@ -597,11 +608,38 @@ function ritualPressure(a, id) {
 }
 
 // ---------------- The slot ----------------
+// Classify an action detail into a ledger kind. Returns null if the act
+// isn't worth logging (idle chatter, filler, ambiguous). Only meaningful
+// world events get logged.
+function classifyLedgerKind(kind, detail) {
+  const d = String(detail || "").toLowerCase();
+  if (!d) return null;
+  if (/buy|bought|purchase|shop|grocer|paid for/.test(d)) return "purchase";
+  if (/invite|invited/.test(d)) return "invitation";
+  if (/promise|promised|swear|will.*(pick up|call|visit)/.test(d)) return "promise";
+  if (/mail|posted|letter|package/.test(d)) return "mail";
+  if (/phone|call|dial|hang up|answered/.test(d)) return "phone_call";
+  if (/gave|gift|handed/.test(d)) return "gift";
+  if (/argue|argument|shouted|snapped/.test(d)) return "argument";
+  if (/haircut|barbershop|got his hair/.test(d)) return "haircut";
+  if (/arrive|arrived|shown up/.test(d)) return "arrival";
+  if (/depart|left|walked out/.test(d)) return "departure";
+  if (/eat|ate|meal|dinner|breakfast|lunch/.test(d) && !/prep|cook/.test(d)) return "meal";
+  return null;
+}
+
 async function runSlot() {
   if (W.paused || W.busy) return;
   W.busy = true; W.lastError = null;
   try {
-    W.slot++; W.minutes += CFG.SLOT_SIM_MINUTES;
+    // Adaptive slot advancement: when Truman is asleep (and thus most of the
+    // cast is), the sim burns through hours fast so the producer isn't wasting
+    // real-time on scenes nobody will watch. When Truman is awake, we slow to
+    // 1 sim-hour per slot so beats accumulate and captures are rich.
+    const worldHourNow = W.minutes / 60;
+    const trumanAsleep = worldHourNow < 6.75 || worldHourNow >= 22.5;
+    const slotMinutes = trumanAsleep ? 240 : 60;
+    W.slot++; W.minutes += slotMinutes;
     if (W.minutes >= 1440) {
       W.minutes -= 1440; W.day++; ledgerDrift(); W.reflectedDay = 0;
       // Advance location threads: some resolve, some step forward from
@@ -772,6 +810,7 @@ async function runSlot() {
         meterPressure: METERS.pressureText(a),
         chorePressure: CHORES.pressureText(W, id),
         storyPressure: (() => { try { return getStoryEngine().pressureFor(id); } catch (_) { return ""; } })(),
+        ledgerContext: (() => { try { return getLedger().contextFor(id, W.day); } catch (_) { return ""; } })(),
         locationContext,
         campaignContext,
       };
@@ -789,6 +828,46 @@ async function runSlot() {
         if (out.act.kind === "talk") a.lastSaid = out.act.detail;
         a.lastAct = `[${out.act.kind}] ${out.act.detail}`.slice(0, 200);
         a.dayLog.unshift({ time: clockStr(), think: out.think, act: a.lastAct, said: out.act.kind === "talk" ? out.act.detail : "" });
+
+        // Butterfly ledger: check preconditions and log significant acts.
+        try {
+          const LG = getLedger();
+          const detail = String(out.act.detail || "").toLowerCase();
+          // Precondition check — did this act require something that hasn't
+          // been logged? If so, narrate it backward into an earlier dayLog
+          // entry so continuity holds.
+          if (out.act.kind === "act" || out.act.kind === "chore") {
+            const pre = LG.checkPrecondition({
+              actionText: detail,
+              actors: [id],
+              currentDay: W.day,
+              currentHour: W.minutes / 60,
+            });
+            for (const miss of pre.missing || []) {
+              const nar = LG.narrateBackward(miss, W.day, W.minutes / 60);
+              if (nar) {
+                // Insert into the actor's dayLog at the correct earlier time
+                // so subsequent turns see the retroactive event as fact.
+                a.dayLog.push(nar.dayLogLine);
+                a.dayLog.sort((x, y) => (x.time || "").localeCompare(y.time || ""));
+                olog(`LEDGER: retroactive — ${nar.entry.summary}`);
+              }
+            }
+          }
+          // Log this act as an entry if it has real world weight
+          const kind = classifyLedgerKind(out.act.kind, detail);
+          if (kind) {
+            LG.add({
+              day: W.day, hour: W.minutes / 60,
+              kind, actors: [id],
+              summary: `${a.name} ${detail}`.slice(0, 200),
+              meta: { location: a.location },
+              weight: "normal",
+            });
+          }
+        } catch (e) {
+          olog(`LEDGER error: ${e.message.slice(0, 100)}`);
+        }
         if (a.dayLog.length > 60) a.dayLog.pop();
         a.recentCores = a.recentCores || [];
         a.recentCores.push((out.act.detail || out.act.kind || "").toLowerCase().split(/\s+/).slice(0, 4).join(" "));
@@ -1168,7 +1247,6 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     // 5) STORY OBSERVE — the story engine decides when it's ready to run.
     // Non-blocking so it doesn't hold up the tick loop.
     if (W.__storyObservedDay !== W.day) {
-      W.__storyObservedDay_tentative = W.day;
       (async () => {
         try {
           const SE = getStoryEngine();
@@ -1178,13 +1256,19 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
             weather: W.env?.weather || "clear",
             agents: Object.fromEntries(
               Object.entries(W.agents).map(([id, a]) => [id, {
-                name: a.name, location: a.location, think: a.think,
+                name: a.name, location: a.location, think: a.think, mood: a.mood,
                 lastSaid: a.lastSaid, lastAct: a.lastAct,
                 dayLog: (a.dayLog || []).slice(0, 12),
               }])
             ),
             recentEvents: (W.truthLog || []).slice(-30),
           };
+          // Daily arc planning — fires at day start.
+          if (SE.shouldPlanDailyArc(snapshot)) {
+            const arc = await SE.planDailyArc(snapshot);
+            if (arc?.arc) olog(`STORY: arc planned — ${arc.summary}`);
+          }
+          // Nightly observation.
           if (SE.shouldObserve(snapshot)) {
             W.__storyObservedDay = W.day;
             const r = await SE.observe(snapshot);

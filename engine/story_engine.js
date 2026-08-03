@@ -80,6 +80,79 @@ class StoryEngine {
     return false;
   }
 
+  // Should we plan a daily arc now? Fires at the start of each new day.
+  shouldPlanDailyArc(worldSnapshot) {
+    const day = worldSnapshot.day;
+    const hour = worldSnapshot.hour;
+    if (day > (this.state.lastArcPlannedDay || 0) && hour >= 5 && hour <= 9) return true;
+    return false;
+  }
+
+  // Plan one daily arc — a small emergent beat that should happen today.
+  // Fed back into agent pressure so their turns organically make room for it.
+  async planDailyArc(worldSnapshot) {
+    if (!this.shouldPlanDailyArc(worldSnapshot)) return null;
+    const day = worldSnapshot.day;
+    const activeThreads = this.state.threads.slice(0, 10)
+      .map((t) => `- [${t.weight}] ${t.summary}`).join("\n");
+    const agentBrief = Object.entries(worldSnapshot.agents || {}).slice(0, 12)
+      .map(([id, a]) => `- ${a.name}: ${a.mood || "steady"}, recently ${a.lastAct || "quiet"}`).join("\n");
+    const prompt = `You are helping shape ONE small emergent beat for today. Not a script — a possibility, a nudge.
+
+RULES:
+- ONE beat. One small moment or thread. Not a plot.
+- Must feel organic, not manufactured. Something a real day would produce.
+- Draw from active threads if they'd naturally deepen today. Otherwise a fresh small beat.
+- Not big or dramatic. A small human moment: a hesitation, an odd remark, a gift, a rediscovery, an object noticed, a chance encounter, a decision withheld.
+- Written in one sentence.
+- Must involve 1-3 specific agents by id.
+
+ACTIVE THREADS:
+${activeThreads || "  (none)"}
+
+CAST TODAY:
+${agentBrief}
+
+Return JSON:
+- beat_summary: one sentence describing what small thing could happen today
+- involves: array of agent ids
+- pressure: second-person text (one paragraph) for the involved agents — how this shapes their day, without dictating any specific action
+- keywords: 3-5 short strings for later matching
+
+If today feels quieter and shouldn't have a beat: return {"beat_summary": "", "involves": [], "pressure": "", "keywords": []}`;
+
+    let out;
+    try {
+      out = await this.callJSON(prompt, DAILY_ARC_SCHEMA);
+    } catch (e) {
+      this.olog(`STORY: arc planning failed — ${e.message}`);
+      return null;
+    }
+    this.state.lastArcPlannedDay = day;
+    if (!out.beat_summary || !out.involves || !out.involves.length) {
+      this.save();
+      return { skipped: true };
+    }
+    // Register as a small thread that will get touched over the day
+    const id = `arc_${++this.state.idCounter}`;
+    this.state.threads.push({
+      id,
+      summary: out.beat_summary,
+      involves: out.involves,
+      weight: "small",       // daily arcs start small; observe() may promote later
+      pressure: out.pressure,
+      firstNoticedAt: `day ${day} hour ${worldSnapshot.hour} (planned)`,
+      createdDay: day,
+      lastTouchedDay: day,
+      touches: 1,
+      keywords: out.keywords || [],
+      isArc: true,
+    });
+    this.save();
+    this.olog(`STORY: daily arc for day ${day} — ${out.beat_summary}`);
+    return { arc: id, summary: out.beat_summary };
+  }
+
   // The heart of the engine. Read the last sim-day of turns and events. Ask
   // the model: what narrative pressure is emerging? Return an array of
   // thread deltas — new threads to add, or updates to existing threads.
@@ -289,6 +362,17 @@ const OBSERVATION_SCHEMA = {
     },
   },
   required: ["new_threads", "thread_updates"],
+};
+
+const DAILY_ARC_SCHEMA = {
+  type: "object",
+  properties: {
+    beat_summary: { type: "string" },
+    involves: { type: "array", items: { type: "string" } },
+    pressure: { type: "string" },
+    keywords: { type: "array", items: { type: "string" } },
+  },
+  required: ["beat_summary", "involves"],
 };
 
 module.exports = { StoryEngine, OBSERVATION_SCHEMA };

@@ -109,6 +109,25 @@ function pickNextSubject(W, recentCaptures = []) {
 
   if (!candidates.length) return null;
 
+  // Story engine: boost candidates that intersect with active narrative
+  // threads. Failing silently if the story engine isn't ready.
+  try {
+    const ape = require("./ape");
+    const SE = ape.getStoryEngine ? ape.getStoryEngine() : null;
+    if (SE) {
+      const enriched = candidates.map((c) => ({
+        subjectKey: c.key,
+        actNormalized: String(c.agent.lastAct || "").toLowerCase().replace(/[^a-z ]/g, "").trim(),
+        location: c.agent.location,
+      }));
+      const curated = SE.curateFor(enriched);
+      for (let i = 0; i < candidates.length; i++) {
+        candidates[i].score += curated[i].storyBonus || 0;
+        candidates[i].storyBonus = curated[i].storyBonus || 0;
+      }
+    }
+  } catch (_) { /* story engine not ready; proceed unweighted */ }
+
   // Sort highest first, then Truman-preferred at ties, then whoever was
   // updated most recently (dayLog longest = most active this day).
   candidates.sort((a, b) => {

@@ -17,6 +17,21 @@ const MEDIA = require("./media_plan");
 const PRODUCT_PLAN = require("./product_plan");
 const CCTV = require("./cctv_camera");
 const TIME_OF_DAY = require("./time_of_day");
+const { StoryEngine } = require("./story_engine");
+// STORY engine singleton is lazily initialized on first use to avoid
+// module-init-order tangles with LOG, W, clockStr.
+let STORY = null;
+function getStoryEngine() {
+  if (STORY) return STORY;
+  STORY = new StoryEngine({
+    savePath: path.join(path.dirname(CFG.SAVE_PATH), "story_state.json"),
+    callJSON,
+    olog: (m) => olog(m),
+    textModel: CFG.TEXT_MODEL,
+  });
+  STORY.load().catch(() => {});
+  return STORY;
+}
 const DAILIES = require("./dailies");
 const METERS = require("./meters");
 const CHORES = require("./chores");
@@ -756,6 +771,7 @@ async function runSlot() {
         ritualPressure: ritualPressure(a, id),
         meterPressure: METERS.pressureText(a),
         chorePressure: CHORES.pressureText(W, id),
+        storyPressure: (() => { try { return getStoryEngine().pressureFor(id); } catch (_) { return ""; } })(),
         locationContext,
         campaignContext,
       };
@@ -1148,6 +1164,39 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
 
     // 4) REFLECT nightly
     if (W.minutes >= CFG.REFLECT_HOUR * 60 && W.reflectedDay !== W.day) { W.reflectedDay = W.day; await reflectAll(); }
+
+    // 5) STORY OBSERVE — the story engine decides when it's ready to run.
+    // Non-blocking so it doesn't hold up the tick loop.
+    if (W.__storyObservedDay !== W.day) {
+      W.__storyObservedDay_tentative = W.day;
+      (async () => {
+        try {
+          const SE = getStoryEngine();
+          const snapshot = {
+            day: W.day,
+            hour: W.minutes / 60,
+            weather: W.env?.weather || "clear",
+            agents: Object.fromEntries(
+              Object.entries(W.agents).map(([id, a]) => [id, {
+                name: a.name, location: a.location, think: a.think,
+                lastSaid: a.lastSaid, lastAct: a.lastAct,
+                dayLog: (a.dayLog || []).slice(0, 12),
+              }])
+            ),
+            recentEvents: (W.truthLog || []).slice(-30),
+          };
+          if (SE.shouldObserve(snapshot)) {
+            W.__storyObservedDay = W.day;
+            const r = await SE.observe(snapshot);
+            if (r.added || r.updated || r.faded) {
+              olog(`STORY: observation — ${r.added} new, ${r.updated} touched, ${r.faded} faded`);
+            }
+          }
+        } catch (e) {
+          olog(`STORY: observation error — ${String(e.message).slice(0, 120)}`);
+        }
+      })();
+    }
 
     if (W.slot % CFG.SAVE_EVERY_SLOTS === 0) save();
   } catch (e) {
@@ -2855,7 +2904,7 @@ function shotImage(sparkId, idx) {
 }
 
 module.exports = {
-  W, CFG, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, callGemini: gemini, genImage, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS,
+  W, CFG, snapshot, start, save, logs: () => [...LOG], shotImage, nudge, CAMPAIGNS, BRAND_GEO, MEDIA, PRODUCT_PLAN, DAILIES, SCENE_STORE, MOMENT_STORE, BUDGET, STORAGE, peekFrame, animateFrame, callJSON, callGemini: gemini, genImage, ensureCutaway, ensureCampaignStore, ensurePlate, renderObjectFocus, captureLivingMoment, OBJECT_FOCUS, getStoryEngine,
   autoResume: () => { if (W.paused) { W.paused = false; runSlot().catch((e) => olog(`ERROR beat(autoResume): ${String(e.message).slice(0, 140)}`)); olog("world auto-resumed by campaign start"); } },
   worldPaused: () => W.paused,
   control: {

@@ -198,7 +198,7 @@ ${agent.wants.map((g, i) => `  ${i}. ${g}`).join("\n")}
 
 NOW: Day ${ctx.day}, ${ctx.clock}. You are in the ${agent.location}. Present: ${here}. Objects here: ${objs}.${nearby}
 ${ctx.envLine}${ctx.loopNote || ""}
-${ctx.ritualPressure ? "\n" + ctx.ritualPressure + "\n" : ""}${ctx.meterPressure || ""}${ctx.chorePressure || ""}
+${ctx.storyPressure ? "\n" + ctx.storyPressure + "\n" : ""}${ctx.ritualPressure ? "\n" + ctx.ritualPressure + "\n" : ""}${ctx.meterPressure || ""}${ctx.chorePressure || ""}
 ${ctx.locationContext ? "\n" + ctx.locationContext + "\n" : ""}${ctx.campaignContext ? "\n" + ctx.campaignContext + "\n" : ""}
 ${inbox}
 ${events}

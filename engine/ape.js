@@ -591,10 +591,21 @@ function ritualPressure(a, id) {
     if (h >= 18 && h < 18.75)    return ritual("DINNER WITH TRUMAN: sit together, ask about his day, watch how he responds, keep the tone even");
   }
 
-  // Marlon weekday — restocking route
+  // Marlon weekday — restocking route. Rotates so his day doesn't feel
+  // identical day to day, same technique as Truman's breakfast rotation.
   if (id === "marlon" && !isWeekend) {
     if (h >= 7.25 && h < 7.75)   return ritual("morning: coffee at his kitchen counter, get the day's Kaiser Chicken paperwork together, out to the truck");
-    if (h >= 12 && h < 12.5)     return ritual("lunch break somewhere on the route — sometimes swings by the Good Time Café to sit with Truman");
+    if (h >= 12 && h < 12.5) {
+      const lunchRotation = [
+        "lunch break parked near the harbor, eating a sandwich alone, radio on low",
+        "swings by the Good Time Café — sits with Truman if he's there, Doris brings the usual without asking",
+        "lunch on the tailgate of the truck outside Seahaven Mutual, catches Truman on his break",
+        "quick lunch at his own apartment, back out on the route within twenty minutes",
+        "lunch break at the park benches, half-watching the ducks, half-watching the clock",
+        "grabs something from the vending route itself — a sandwich from one of his own machines, eats standing up",
+      ];
+      return ritual(lunchRotation[W.day % lunchRotation.length]);
+    }
     if (h >= 19 && h < 21)       return ritual("evening at home — beer on the porch if it's warm, phone within reach in case Truman calls");
   }
 
@@ -626,6 +637,26 @@ function classifyLedgerKind(kind, detail) {
   if (/depart|left|walked out/.test(d)) return "departure";
   if (/eat|ate|meal|dinner|breakfast|lunch/.test(d) && !/prep|cook/.test(d)) return "meal";
   return null;
+}
+
+// Anti-repeat-dialogue: dayLog is a rolling window that spans multiple real
+// days (capped at 60 entries, never cleared). Pull this agent's recent
+// spoken lines and tell them not to repeat the same line almost verbatim.
+// This is what stops "I'm heading right past the front rack anyway, Tru.
+// Save your legs." from recurring every single day — without this, a static
+// situation (same ritual pressure, same wants, same seed memory) gives the
+// LLM nothing to differentiate on, so it converges on the same "most
+// plausible" line each time.
+function antiRepeatDialoguePressure(agent) {
+  const recentLines = (agent.dayLog || [])
+    .filter((d) => d.said && d.said.length > 8)
+    .slice(0, 15)
+    .map((d) => d.said);
+  if (!recentLines.length) return "";
+  // Dedup — same line might appear multiple times in the window
+  const unique = [...new Set(recentLines)].slice(0, 6);
+  if (!unique.length) return "";
+  return `THINGS YOU'VE SAID RECENTLY (do not repeat any of these almost word-for-word — if you're in a similar situation again, find a genuinely different way to say it, or say something else entirely):\n${unique.map((l) => `- "${l}"`).join("\n")}`;
 }
 
 async function runSlot() {
@@ -808,6 +839,7 @@ async function runSlot() {
         chorePressure: CHORES.pressureText(W, id),
         storyPressure: (() => { try { return getStoryEngine().pressureFor(id); } catch (_) { return ""; } })(),
         ledgerContext: (() => { try { return getLedger().contextFor(id, W.day); } catch (_) { return ""; } })(),
+        antiRepeatDialogue: antiRepeatDialoguePressure(a),
         locationContext,
         campaignContext,
       };

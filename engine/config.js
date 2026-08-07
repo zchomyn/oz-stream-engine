@@ -33,10 +33,10 @@ module.exports = {
   SLOT_REAL_MS: 3000,            // 1 slot per 3s real (baseline; actual limited by agent turn latency)
   DIRECTOR_EVERY_SLOTS: 3,       // director every ~90 sim-min
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
-  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "2", 10),
+  STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "4", 10),
   STREAM_REALTIME_SYNC: process.env.STREAM_REALTIME_SYNC !== "false",
   STREAM_PLAYBACK_MS: parseInt(process.env.STREAM_PLAYBACK_MS || "6000", 10),   // consumer tick
-  STREAM_CANDIDATES_PER_FRAME: parseInt(process.env.STREAM_CANDIDATES_PER_FRAME || "2", 10),  // renders per beat — 2 keeps producer ahead of 6s playback; 3 was starving the buffer
+  STREAM_CANDIDATES_PER_FRAME: parseInt(process.env.STREAM_CANDIDATES_PER_FRAME || "1", 10),  // renders per beat — speed experiment: 1 candidate + 4 parallel workers to close the 8.3x production/consumption gap
   REFLECT_HOUR: 23,              // nightly reflection
 
   // Images

@@ -105,6 +105,7 @@ const server = http.createServer(async (req, res) => {
         subject: meta.subject || "Truman Burbank",
         subjectLocation: meta.location || null,
         camLabel: meta.camLabel || null,
+        activityLine: (meta.activityLines || [])[0] || null,
         frameIndex: info?.index ?? null,
         buffer: bufStat,
         thoughts,
@@ -1276,6 +1277,8 @@ function renderStreamHtml() {
     .chat-said::after { content: '\\201D'; color: #888; margin-left: 2px; }
     .chat-thought { color: #a4a4a4; font-style: italic; font-size: 12px; }
     .chat-thought::before { content: '~ '; color: #666; }
+    .chat-action { color: #7d7d7d; font-size: 11.5px; letter-spacing: 0.02em; }
+    .chat-action::before { content: '\\00b7 '; color: #555; }
     .chat-system {
       color: #6b6b6b;
       font-size: 9.5px;
@@ -1363,7 +1366,7 @@ function renderStreamHtml() {
     whoEl.className = 'chat-who';
     whoEl.textContent = who;
     const textEl = document.createElement('div');
-    textEl.className = kind === 'said' ? 'chat-said' : 'chat-thought';
+    textEl.className = kind === 'said' ? 'chat-said' : kind === 'action' ? 'chat-action' : 'chat-thought';
     textEl.textContent = text;
     entry.appendChild(whoEl);
     entry.appendChild(textEl);
@@ -1408,11 +1411,19 @@ function renderStreamHtml() {
         // what the stream is following even when the agent hasn't changed.
         appendSystem(d.day, d.clock, d.subject, d.subjectLocation, d.camLabel);
         // Populate chat sidebar with this frame's thoughts + spoken lines
+        let hadDialogue = false;
         if (Array.isArray(d.thoughts)) {
           for (const t of d.thoughts) {
-            if (t.said) appendChat(t.who, 'said', t.said);
-            if (t.think) appendChat(t.who, 'think', t.think);
+            if (t.said) { appendChat(t.who, 'said', t.said); hadDialogue = true; }
+            if (t.think) { appendChat(t.who, 'think', t.think); hadDialogue = true; }
           }
+        }
+        // Fallback: if this frame had no fresh dialogue/thought, show the
+        // activity line instead so the sidebar always has SOMETHING moving,
+        // not just the system entry. Many captured moments are mid-action
+        // with no spoken line — this keeps the feed from going quiet.
+        if (!hadDialogue && d.activityLine) {
+          appendChat(d.subject || 'Truman', 'action', d.activityLine);
         }
       } else {
         // Same frame still. If it's been more than 8 seconds since we last

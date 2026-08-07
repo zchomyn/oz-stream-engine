@@ -358,6 +358,20 @@ function hashString(s) {
   return h;
 }
 
+// Marlon's lunch rotation — SHARED source of truth for both his actual
+// location (schedule()) and his narrated activity (ritualPressure()). Each
+// entry's location must be a real resolvable location key. Keeping these
+// coupled prevents the location-says-apartment-but-narration-says-harbor
+// mismatch that broke occupant matching for visual captures.
+const MARLON_LUNCH_ROTATION = [
+  { location: "seahaven harbor", text: "lunch break parked near the harbor, eating a sandwich alone, radio on low" },
+  { location: "the good time café", text: "swings by the Good Time Café — sits with Truman if he's there, Doris brings the usual without asking" },
+  { location: "seahaven mutual", text: "lunch on the tailgate of the truck outside Seahaven Mutual, catches Truman on his break" },
+  { location: "marlon's apartment", text: "quick lunch at his own apartment, back out on the route within twenty minutes" },
+  { location: "seahaven park", text: "lunch break at the park benches, half-watching the ducks, half-watching the clock" },
+  { location: "restocking route (kaiser chicken vending)", text: "grabs something from the vending route itself — a sandwich from one of his own machines, eats standing up" },
+];
+
 function schedule(a, id) { // routine gates: who is out / asleep / in transit
   // Forced visits (via /api/campaigns/:id/force-visit) — demo tool. Keeps
   // the agent at the store for a short window regardless of commute state.
@@ -497,7 +511,28 @@ function schedule(a, id) { // routine gates: who is out / asleep / in transit
     return { asleep: true };
   }
   if (id === "marlon") {
-    if (!isWeekend && h >= 8 && h < 16) return { away: "restocking route (kaiser chicken vending)" };
+    // Weekday work hours
+    if (!isWeekend && h >= 8 && h < 12)  return { away: "restocking route (kaiser chicken vending)" };
+    // Lunch — location MUST match MARLON_LUNCH_ROTATION's ritual text (see
+    // ritualPressure()) or the occupant filter will place him somewhere the
+    // narration doesn't match.
+    if (!isWeekend && h >= 12 && h < 12.5) {
+      const spot = MARLON_LUNCH_ROTATION[W.day % MARLON_LUNCH_ROTATION.length];
+      return { away: spot.location };
+    }
+    if (!isWeekend && h >= 12.5 && h < 16) return { away: "restocking route (kaiser chicken vending)" };
+    if (!isWeekend && h >= 16 && h < 16.25) return { away: "walking home from the route" };
+    // Weekday evening — real variety instead of pure apartment lockdown.
+    if (!isWeekend && h >= 16.25 && h < 19) {
+      const eveningRotation = ["marlon's apartment", "seahaven harbor", "the good time café", "marlon's apartment", "seahaven mutual"];
+      return { away: eveningRotation[W.day % eveningRotation.length] };
+    }
+    if (isSunday && h >= 10 && h < 12) return { away: "seahaven harbor" };
+    // Saturday — errands and being out, not locked in
+    if (dow === 6 && h >= 10 && h < 13) {
+      const satRotation = ["seahaven grocers", "seahaven harbor", "the good time café"];
+      return { away: satRotation[W.day % satRotation.length] };
+    }
     if (h >= 7.25 && h < 23)   return { away: "marlon's apartment" };
     return { asleep: true };
   }
@@ -558,11 +593,36 @@ function ritualPressure(a, id) {
 
   // Truman weekday
   if (id === "truman" && !isWeekend) {
-    if (h >= 6.75 && h < 7.15)   return ritual("morning: alarm off, up quietly, into the bathroom. Electric razor. Splash of aftershave. The small rituals of a man who takes care");
+    // Waking — before the bathroom. Making the bed some mornings, not
+    // others (real households aren't perfectly tidy every day).
+    if (h >= 6.5 && h < 6.75) {
+      const wakingRotation = [
+        "wakes at the alarm, lies still for a moment looking at the ceiling before getting up",
+        "wakes a little before the alarm, quiet dream fading — can't quite remember it, a fleeting unease he can't name",
+        "wakes, pulls the covers up and makes the bed properly before anything else — corners tucked, pillow squared",
+        "wakes, sits on the edge of the bed for a second, one hand rubbing his face, before standing",
+        "wakes to a bird outside the window — a mourning dove on the sill, gone as soon as he sits up",
+        "wakes, glances at the small blue alarm clock, does the math on how much time he has, gets moving",
+      ];
+      return ritual(wakingRotation[W.day % wakingRotation.length]);
+    }
+    // Bathroom — teeth, hair, shaving, rotated so it's not the same fixed
+    // razor-every-day beat.
+    if (h >= 6.75 && h < 7.15) {
+      const bathroomRotation = [
+        "bathroom: brushes his teeth first, then the electric razor, quick and practiced. Splash of aftershave after",
+        "bathroom: electric razor first, then brushes his teeth. Runs a comb through his hair, side part, same as always",
+        "bathroom: shaves, then stands a moment longer than usual looking at himself in the mirror — nothing wrong, just looking",
+        "bathroom: quick brush of the teeth, skips shaving today (already close enough from yesterday), combs his hair back into place",
+        "bathroom: the full routine — teeth, razor, aftershave, hair combed — the small rituals of a man who takes care",
+        "bathroom: brushes his teeth, catches sight of a stray gray hair at his temple in the mirror, doesn't mention it to anyone",
+      ];
+      return ritual(bathroomRotation[W.day % bathroomRotation.length]);
+    }
     // Breakfast variety — different day of week, different beat. Some
     // mornings coffee, some toast, some just standing at the window looking
     // at the light. Not always the same coffee-pour.
-    if (h >= 7.15 && h < 7.75) {
+    if (h >= 7.15 && h < 7.6) {
       const breakfastRotation = [
         "BREAKFAST WITH MERYL: kitchen table, dry toast with butter and a small dish of jam, orange juice from the fridge. Talk to her about the weather or the news — she wants to hear your voice",
         "BREAKFAST WITH MERYL: standing at the kitchen window with a slice of toast, watching Cal the mailman come up the walk. Meryl at the table with her tea",
@@ -570,11 +630,40 @@ function ritualPressure(a, id) {
         "BREAKFAST WITH MERYL: no time for a real breakfast — a slice of toast in one hand, adjusting the tie with the other, Meryl handing you a wrapped lunch for the day",
         "BREAKFAST WITH MERYL: kitchen table, coffee from the glass carafe, cornflakes with milk — the standard weekday routine. She's in her uniform already",
         "BREAKFAST WITH MERYL: just fruit and a banana. She mentions the neighbor's dog was barking again. You listen more than you talk",
+        "BREAKFAST WITH MERYL: pops two slices in the toaster, butters them carefully edge to edge while they're still hot, eats standing at the counter",
       ];
       return ritual(breakfastRotation[W.day % breakfastRotation.length]);
     }
-    if (h >= 7.75 && h < 8.33)   return ritual("morning at home — Zenith TV on the news, quick look at the paper (Seahaven Chronicle), Meryl grabs her cardigan, you check your wallet and keys");
-    if (h >= 8.33 && h < 8.5)    return ritual("walking to work along Market Street right now — greet the neighbours (Mr Fenwick, the twins on their bikes, the mailman if it's early enough) — notice one specific thing on this specific walk");
+    // Getting ready to leave — news, keys, wallet, small anxious or
+    // wandering thoughts. This is where "looking for keys" can become a
+    // real tiny drama some mornings if the keys object isn't on its hook.
+    if (h >= 7.6 && h < 8.15) {
+      const readyRotation = [
+        "Zenith TV on to the Seahaven Morning News while you finish getting ready — half-listening, half getting your jacket",
+        "the kitchen radio is on instead of the TV this morning — local news, the weather for the week. Meryl hums along to the tail end of a song",
+        "a quick anxious thought passes through — something about work, a form you might have left unfinished — gone as fast as it came, hard to hold onto",
+        "reach for your keys on the hook by the door and they're not there — a small scramble, checking the kitchen counter, your coat pocket from yesterday, before you find them",
+        "check your wallet, count the bills out of habit, tuck it back in your pocket. Meryl straightens your collar without asking",
+        "quick look at the Seahaven Chronicle folded on the counter — a headline catches your eye for a second before you set it back down",
+        "grab your keys off the hook, check your pocket for your wallet, a small private ritual before the door — the same three taps of the pocket you've done for years",
+      ];
+      return ritual(readyRotation[W.day % readyRotation.length]);
+    }
+    if (h >= 8.15 && h < 8.33)   return ritual("out the front door — a breath of the morning air on the step before heading down toward Market Street");
+    // The walk to work — specific noticing each day, not the same
+    // generic "greet the neighbours" line every time.
+    if (h >= 8.33 && h < 8.5) {
+      const walkRotation = [
+        "walking to work along Market Street — Cal the mailman passes going the other way, two fingers to his cap",
+        "walking to work — the Kessler twins race by on their bikes, nearly clipping the hydrant on the corner",
+        "walking to work — pauses a half-second at the bakery window, the smell of something baking pulling at him before he keeps moving",
+        "walking to work — a gull wheeling overhead, loud, gone toward the harbor",
+        "walking to work — realizes halfway down Market Street he's forgotten something small (his lunch, a form, doesn't matter which) — decides it's not worth turning back for",
+        "walking to work — Rex is out front of the barbershop sweeping the step, they trade a nod",
+        "walking to work — quiet morning, nobody much out yet, just his own footsteps on the sidewalk",
+      ];
+      return ritual(walkRotation[W.day % walkRotation.length]);
+    }
     if (h >= 12 && h < 13)       return ritual("lunch at the Good Time Café — same booth by the window, meatloaf sandwich or the tuna melt, coffee, sometimes Marlon drops by mid-route");
     if (h >= 17.2 && h < 17.5)   return ritual("just walked in from work — hang the jacket in the front hallway, wallet on the sideboard, kiss Meryl if she's home");
     if (h >= 18 && h < 18.75)    return ritual("DINNER WITH MERYL: kitchen table, whatever Meryl's put together (chicken, pot roast, the pasta bake). Sit together. Talk — about the day at the office, about her shift. This is a shared-room moment");
@@ -583,7 +672,17 @@ function ritualPressure(a, id) {
 
   // Meryl weekday — hospital shift, home in the afternoon
   if (id === "meryl" && !isWeekend) {
-    if (h >= 6.5 && h < 7.15)    return ritual("morning: shower, uniform, pin the hair back, small careful makeup — the professional version of yourself");
+    if (h >= 6.5 && h < 7.15) {
+      const merylMorningRotation = [
+        "morning: shower first, then pins her hair back at the bathroom mirror, small careful makeup — the professional version of herself",
+        "morning: brushes her teeth, pins her hair, catches Truman's eye in the mirror behind her and smiles without turning around",
+        "morning: shower, uniform laid out the night before, quick and efficient — she's done this a thousand mornings",
+        "morning: a moment at the bedroom window before getting dressed, watching the light change, then into the uniform",
+        "morning: hair pinned, small dab of powder, checks her watch twice — running a few minutes behind and she knows it",
+        "morning: full routine, unhurried today — shower, hair, makeup, humming something under her breath",
+      ];
+      return ritual(merylMorningRotation[W.day % merylMorningRotation.length]);
+    }
     if (h >= 7.15 && h < 7.5)    return ritual("BREAKFAST WITH TRUMAN: kitchen table. Cheerful. Something bright, on-brand, on-script — mention Chef's Pal salad-dressing or Kaiser Chicken if it fits naturally");
     if (h >= 7.25 && h < 7.5)    return ritual("walking to the hospital — clip badge on, brace for the shift");
     if (h >= 16 && h < 17)       return ritual("just home from the shift — kick off the sneakers, put the kettle on, sit for ten quiet minutes before starting anything");
@@ -596,15 +695,7 @@ function ritualPressure(a, id) {
   if (id === "marlon" && !isWeekend) {
     if (h >= 7.25 && h < 7.75)   return ritual("morning: coffee at his kitchen counter, get the day's Kaiser Chicken paperwork together, out to the truck");
     if (h >= 12 && h < 12.5) {
-      const lunchRotation = [
-        "lunch break parked near the harbor, eating a sandwich alone, radio on low",
-        "swings by the Good Time Café — sits with Truman if he's there, Doris brings the usual without asking",
-        "lunch on the tailgate of the truck outside Seahaven Mutual, catches Truman on his break",
-        "quick lunch at his own apartment, back out on the route within twenty minutes",
-        "lunch break at the park benches, half-watching the ducks, half-watching the clock",
-        "grabs something from the vending route itself — a sandwich from one of his own machines, eats standing up",
-      ];
-      return ritual(lunchRotation[W.day % lunchRotation.length]);
+      return ritual(MARLON_LUNCH_ROTATION[W.day % MARLON_LUNCH_ROTATION.length].text);
     }
     if (h >= 19 && h < 21)       return ritual("evening at home — beer on the porch if it's warm, phone within reach in case Truman calls");
   }
@@ -1707,7 +1798,7 @@ async function captureLivingMoment(rawLocation) {
   // world reflects the actual hour — coffee empties by 10am, TV off during
   // work hours, blinds closed at night, rain slicker gone during the workday.
   // Idempotent: safe to call every capture; overwrites states in place.
-  TIME_OF_DAY.applyTimeStates(W.objects, worldHour, W.env?.weather || "clear");
+  TIME_OF_DAY.applyTimeStates(W.objects, worldHour, W.env?.weather || "clear", W.day);
 
   // Atmosphere descriptor — lighting, sky, shadow language for the model.
   const atmosphere = TIME_OF_DAY.atmosphereFor(worldHour, W.env?.weather || "clear");
@@ -2715,14 +2806,28 @@ function start() {
   // Stream engine: sync to real wall clock. Truman's day should mirror the
   // viewer's day. If the sim clock drifts more than 60 sim-minutes from real
   // time (either fresh boot or a long pause), snap it back to now.
+  //
+  // IMPORTANT: uses a FIXED timezone (STREAM_TIMEZONE, default US Eastern —
+  // matches a New England coastal town like Seahaven), not the server
+  // container's raw local time. Railway containers run in UTC by default;
+  // using now.getHours() directly was snapping the sim clock to the wrong
+  // hour on every single deploy (e.g. 9pm real evening becoming 1am UTC —
+  // deep night lighting when it should be evening). This was almost
+  // certainly the root cause of lighting looking wrong relative to the
+  // actual time of day.
   if (CFG.STREAM_REALTIME_SYNC) {
-    const now = new Date();
-    const realMinutes = now.getHours() * 60 + now.getMinutes();
+    const tz = CFG.STREAM_TIMEZONE || "America/New_York";
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "numeric", minute: "numeric", hour12: false,
+    }).formatToParts(new Date());
+    const hh = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10) % 24;
+    const mm = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
+    const realMinutes = hh * 60 + mm;
     const drift = Math.abs(W.minutes - realMinutes);
     if (drift > 60 || W.slot === 0) {
       const prev = clockStr();
       W.minutes = realMinutes;
-      olog(`STREAM: real-clock sync — was ${prev}, now ${clockStr()} (drift ${drift} min)`);
+      olog(`STREAM: real-clock sync (tz=${tz}) — was ${prev}, now ${clockStr()} (drift ${drift} min)`);
     }
   }
   olog(`BOOT ${CFG.APP_VERSION} — world at day ${W.day} ${clockStr()}, slot ${W.slot}, ${W.paused ? "paused" : "running"}, ${CAMPAIGNS.list().length} campaigns loaded`);

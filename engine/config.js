@@ -35,6 +35,7 @@ module.exports = {
   STREAM_AUTO_CAPTURE: process.env.STREAM_AUTO_CAPTURE !== "false",
   STREAM_PARALLEL: parseInt(process.env.STREAM_PARALLEL || "4", 10),
   STREAM_REALTIME_SYNC: process.env.STREAM_REALTIME_SYNC !== "false",
+  STREAM_TIMEZONE: process.env.STREAM_TIMEZONE || "America/New_York",  // fixed timezone for real-clock sync — avoids server-container-UTC drift
   STREAM_PLAYBACK_MS: parseInt(process.env.STREAM_PLAYBACK_MS || "6000", 10),   // consumer tick
   STREAM_CANDIDATES_PER_FRAME: parseInt(process.env.STREAM_CANDIDATES_PER_FRAME || "1", 10),  // renders per beat — speed experiment: 1 candidate + 4 parallel workers to close the 8.3x production/consumption gap
   REFLECT_HOUR: 23,              // nightly reflection

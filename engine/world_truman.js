@@ -60,6 +60,12 @@ const OBJECTS = [
   { name: "framed wedding photograph over the master bed", at: "master bedroom", state: "hung straight, gold frame, dust on the top edge" },
   { name: "small blue alarm clock on the nightstand", at: "master bedroom", state: "reading close to Truman's real-world wake time" },
   { name: "electric razor on the bathroom sink", at: "bathroom", state: "cord coiled, plugged in but off" },
+  { name: "house keys on the small brass hook by the front door", at: "front hallway", state: "hanging on the hook where they always go" },
+  { name: "toaster on the kitchen counter", at: "kitchen", state: "clean, unplugged crumb tray" },
+  { name: "butter dish on the kitchen counter", at: "kitchen", state: "half a stick left, dish lid on" },
+  { name: "hairbrush on the bathroom shelf", at: "bathroom", state: "resting on the shelf above the sink" },
+  { name: "bed in the master bedroom", at: "master bedroom", state: "unmade, covers pulled back" },
+  { name: "kitchen radio on the counter", at: "kitchen", state: "off" },
 ];
 
 const AGENTS = {

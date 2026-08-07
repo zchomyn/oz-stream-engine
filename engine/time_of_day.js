@@ -73,7 +73,7 @@ function atmosphereFor(hour, weather = "clear") {
 //   curtains/blinds:
 //     22:30-06:30 → drawn
 //     otherwise → open
-function applyTimeStates(objects, hour, weather = "clear") {
+function applyTimeStates(objects, hour, weather = "clear", day = 0) {
   if (!Array.isArray(objects)) return objects;
   const h = hour;
 
@@ -111,6 +111,22 @@ function applyTimeStates(objects, hour, weather = "clear") {
 
   // Master bedroom curtains
   if (h < 6.5 || h >= 22) setState("wedding photograph", "hung straight on the wall above the bed. Curtains at the windows drawn closed, room dim.");
+
+  // House keys — a real, occasional small drama. Matches the SAME day-cycle
+  // index used in Truman's morning ritual rotation (readyRotation in ape.js,
+  // 7-entry cycle, index 3 is the "keys aren't on the hook" beat) so the
+  // object state and the narrative text always agree — this is what makes
+  // "looking for keys" a genuine world-memory beat instead of flavor text
+  // that never shows up visually. Only affects the morning window; by the
+  // time he's left for work (h >= 8.15) they're back with him.
+  const isKeysMissingDay = (day % 7) === 3;
+  if (isKeysMissingDay && h >= 7.6 && h < 8.15) {
+    setState("house keys", "not on the hook — misplaced somewhere in the house, needs finding");
+  } else if (h >= 8.15) {
+    setState("house keys", "with Truman, out the door");
+  } else {
+    setState("house keys", "hanging on the hook where they always go");
+  }
 
   // Weather influences
   if (weather === "rain" || weather === "overcast") {

@@ -96,22 +96,40 @@ async function appendFrame(bytes, meta = {}) {
   }
 }
 
-// Advance the consumer pointer if enough time has passed. Sync — no I/O.
-// Called at the top of currentFrame() and currentMeta().
-function tickConsumer(interval_ms) {
-  const now = Date.now();
-  const iv = interval_ms || 6000;
-  if (now - STATE.consumerAdvancedAt >= iv && STATE.consumerCursor < STATE.producerCursor - 1) {
+// Advance the consumer pointer. Called ONLY by the dedicated interval timer
+// below — never by request handlers. This is the fix for a real race
+// condition: previously every reader (status poll, image fetch) independently
+// called tickConsumer() based on wall-clock elapsed time, so two nearly-
+// simultaneous requests could each observe "enough time has passed" and each
+// advance the pointer, meaning the image a browser fetched (triggered by a
+// status response for frame N) could arrive serving frame N+1 by the time it
+// landed. Now there is exactly ONE place the pointer moves, on a fixed clock,
+// so every reader in the same instant sees the identical index — image and
+// text can never disagree about which frame is "now."
+function tickConsumerOnce() {
+  if (STATE.consumerCursor < STATE.producerCursor - 1) {
     STATE.consumerCursor++;
-    STATE.consumerAdvancedAt = now;
+    STATE.consumerAdvancedAt = Date.now();
     persistState();
     purgeConsumed();
   }
 }
 
+let _clockStarted = false;
+let _clockIntervalMs = null;
+function startConsumerClock(intervalMs) {
+  if (_clockStarted && _clockIntervalMs === intervalMs) return;
+  _clockStarted = true;
+  _clockIntervalMs = intervalMs;
+  setInterval(tickConsumerOnce, intervalMs);
+  console.log(`[stream-buffer] consumer clock started — advancing every ${intervalMs}ms`);
+}
+
 // Sync current-frame meta (used by /stream/status which polls constantly).
+// Pure read — does NOT advance the pointer. Starts the consumer clock on
+// first call (lazy init, using whatever interval the caller first passes).
 function currentMeta(interval_ms) {
-  tickConsumer(interval_ms);
+  startConsumerClock(interval_ms || 6000);
   let idx = STATE.consumerCursor;
   if (idx >= STATE.producerCursor) idx = STATE.producerCursor - 1;
   if (idx < 0) return null;
@@ -130,6 +148,7 @@ function currentMeta(interval_ms) {
 }
 
 // Async current-frame bytes fetch from GCS. Used by /stream/latest.jpg.
+// Also a pure read — same index currentMeta() would report at this instant.
 async function currentFrame(interval_ms) {
   const info = currentMeta(interval_ms);
   if (!info) return null;

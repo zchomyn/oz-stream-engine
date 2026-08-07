@@ -1672,6 +1672,8 @@ async function captureLivingMoment(rawLocation) {
 
   const promptText = `A hidden-camera frame of a specific moment in a specific place with specific people. The FIRST reference image is the DEFINITIVE room — you must match its architecture, wall color, furniture positions, floor pattern, and lighting fixtures EXACTLY. The REMAINING reference images are the DEFINITIVE faces of the people — match their facial structure, hair, skin, build EXACTLY.
 
+IMPORTANT: match faces and bodies from the reference photos ONLY — do NOT copy any pose, hand position, gesture, or expression from the reference photos. Those are headshot-style references for identity only. Every person's pose, gesture, and expression in THIS frame must come entirely from the activity described below, not from how they happened to be standing in their reference photo.
+
 DO NOT invent a different room. DO NOT invent different faces. DO NOT invent different furniture. The references are LOCKED. You compose only what these specific people are DOING in this exact room right now.
 
 SCENE: ${sceneDescriptor}

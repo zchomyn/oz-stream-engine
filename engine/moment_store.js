@@ -48,10 +48,14 @@ function momentDir(id) {
   return d;
 }
 
+// Hero JPEGs land in GCS at moments/<id>/hero.jpg. Returns the GCS object
+// path (used as the canonical identifier — meta.json records this so /stream
+// can look it back up).
 async function writeHero(id, bytes) {
-  const p = path.join(momentDir(id), "hero.jpg");
-  await fs.promises.writeFile(p, bytes);
-  return p;
+  const GCS = require("./gcs");
+  const objectPath = `moments/${id}/hero.jpg`;
+  await GCS.upload(objectPath, bytes, "image/jpeg");
+  return objectPath;
 }
 
 function writeMeta(id, meta) {
@@ -123,16 +127,17 @@ function purgeStale() {
 }
 
 // Return the most recent moment as { id, meta, b64 }. Loads the hero JPEG
-// bytes from disk. Used by /stream/latest.jpg to serve the current frame.
-function latest() {
+// bytes from GCS. Async — callers must await. Used by /stream/latest.jpg to
+// serve the current frame.
+async function latest() {
   const entries = list({ limit: 1 });
   if (!entries.length) return null;
   const { id, meta } = entries[0];
-  const p = heroPath(id);
-  if (!exists(p)) return { id, meta, b64: null };
   try {
-    const b64 = fs.readFileSync(p).toString("base64");
-    return { id, meta, b64 };
+    const GCS = require("./gcs");
+    const bytes = await GCS.download(`moments/${id}/hero.jpg`);
+    if (!bytes) return { id, meta, b64: null };
+    return { id, meta, b64: bytes.toString("base64") };
   } catch (_) {
     return { id, meta, b64: null };
   }

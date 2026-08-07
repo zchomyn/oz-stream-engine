@@ -58,31 +58,34 @@ function persistState() {
   try { fs.writeFileSync(STATE_PATH, JSON.stringify(STATE)); } catch (_) {}
 }
 
-function frameFile(index) {
-  return path.join(BUFFER_DIR, `frame_${String(index).padStart(8, "0")}.jpg`);
+// Frame JPEGs are stored in GCS at buffer/frame_XXXXXXXX.jpg. Meta stays
+// local under BUFFER_DIR as small JSON files so status/lookup is cheap and
+// sync — the meta is what /stream/status reads on every poll.
+function frameObject(index) {
+  return `buffer/frame_${String(index).padStart(8, "0")}.jpg`;
 }
 function metaFile(index) {
   return path.join(BUFFER_DIR, `frame_${String(index).padStart(8, "0")}.json`);
 }
 
-// Producer: append a new frame to the ring.
+// Producer: append a new frame to the ring. Async because GCS upload is I/O.
 //   Returns { queued: true, index } on success.
 //   Returns { queued: false, reason } if buffer is at target (producer should back off).
-function appendFrame(bytes, meta = {}) {
-  // Backpressure — if buffer holds more than BUFFER_TARGET unconsumed frames,
-  // don't render another one yet. The auto-capture loop will back off.
+async function appendFrame(bytes, meta = {}) {
   const backlog = STATE.producerCursor - STATE.consumerCursor;
   if (backlog >= BUFFER_TARGET) {
     return { queued: false, reason: `buffer full (${backlog} unconsumed frames)`, backlog };
   }
   const index = STATE.producerCursor;
-  const p = frameFile(index);
+  const objectPath = frameObject(index);
   const mp = metaFile(index);
   try {
-    fs.writeFileSync(p, bytes);
+    const GCS = require("./gcs");
+    await GCS.upload(objectPath, bytes, "image/jpeg");
     fs.writeFileSync(mp, JSON.stringify({
       index,
       producedAt: Date.now(),
+      objectPath,
       ...meta,
     }));
     STATE.producerCursor++;
@@ -93,57 +96,70 @@ function appendFrame(bytes, meta = {}) {
   }
 }
 
-// Consumer: get the current playback frame. Also advances the pointer if
-// enough real time has elapsed since the last advance.
-//   Returns { bytes, meta, index, backlog }
-//   If buffer is empty, returns null.
-function currentFrame(interval_ms) {
+// Advance the consumer pointer if enough time has passed. Sync — no I/O.
+// Called at the top of currentFrame() and currentMeta().
+function tickConsumer(interval_ms) {
   const now = Date.now();
   const iv = interval_ms || 6000;
-  // Advance pointer if enough time has passed AND there's a next frame ready.
   if (now - STATE.consumerAdvancedAt >= iv && STATE.consumerCursor < STATE.producerCursor - 1) {
     STATE.consumerCursor++;
     STATE.consumerAdvancedAt = now;
     persistState();
-    // Purge older frames past retention
     purgeConsumed();
   }
-  // Fall back to producer-1 if consumer is behind, to producer if consumer
-  // hasn't started, otherwise return null.
+}
+
+// Sync current-frame meta (used by /stream/status which polls constantly).
+function currentMeta(interval_ms) {
+  tickConsumer(interval_ms);
   let idx = STATE.consumerCursor;
   if (idx >= STATE.producerCursor) idx = STATE.producerCursor - 1;
   if (idx < 0) return null;
-  const p = frameFile(idx);
   const mp = metaFile(idx);
+  let meta = {};
+  if (fs.existsSync(mp)) {
+    try { meta = JSON.parse(fs.readFileSync(mp, "utf8")); } catch (_) {}
+  }
+  return {
+    meta,
+    index: idx,
+    backlog: STATE.producerCursor - STATE.consumerCursor,
+    producerCursor: STATE.producerCursor,
+    consumerCursor: STATE.consumerCursor,
+  };
+}
+
+// Async current-frame bytes fetch from GCS. Used by /stream/latest.jpg.
+async function currentFrame(interval_ms) {
+  const info = currentMeta(interval_ms);
+  if (!info) return null;
   try {
-    const bytes = fs.readFileSync(p);
-    let meta = {};
-    if (fs.existsSync(mp)) {
-      try { meta = JSON.parse(fs.readFileSync(mp, "utf8")); } catch (_) {}
-    }
-    return {
-      bytes,
-      meta,
-      index: idx,
-      backlog: STATE.producerCursor - STATE.consumerCursor,
-      producerCursor: STATE.producerCursor,
-      consumerCursor: STATE.consumerCursor,
-    };
+    const GCS = require("./gcs");
+    const objectPath = info.meta.objectPath || frameObject(info.index);
+    const bytes = await GCS.download(objectPath);
+    if (!bytes) return null;
+    return { ...info, bytes };
   } catch (_) { return null; }
 }
 
-// Delete frames older than (consumerCursor - CONSUMED_RETENTION).
+// Delete GCS objects older than (consumerCursor - CONSUMED_RETENTION) AND
+// their local meta. Fire-and-forget for the GCS deletes — a lag doesn't hurt.
 function purgeConsumed() {
   const cutoff = STATE.consumerCursor - CONSUMED_RETENTION;
   if (cutoff <= 0) return;
   try {
     const names = fs.readdirSync(BUFFER_DIR);
     for (const n of names) {
-      const m = n.match(/^frame_(\d+)\.(jpg|json)$/);
+      const m = n.match(/^frame_(\d+)\.json$/);
       if (!m) continue;
       const idx = parseInt(m[1], 10);
       if (idx < cutoff) {
         try { fs.unlinkSync(path.join(BUFFER_DIR, n)); } catch (_) {}
+        // Fire-and-forget GCS delete
+        try {
+          const GCS = require("./gcs");
+          GCS.del(frameObject(idx)).catch(() => {});
+        } catch (_) {}
       }
     }
   } catch (_) {}
@@ -160,4 +176,4 @@ function status() {
   };
 }
 
-module.exports = { appendFrame, currentFrame, status, BUFFER_TARGET, purgeConsumed };
+module.exports = { appendFrame, currentFrame, currentMeta, status, BUFFER_TARGET, purgeConsumed };

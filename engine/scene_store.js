@@ -30,21 +30,24 @@ function sceneDir(sceneId) {
 }
 
 async function writeShotStill(sceneId, shotIndex, imageBytes) {
-  const p = path.join(sceneDir(sceneId), `shot_${shotIndex}.jpg`);
-  await fs.promises.writeFile(p, imageBytes);
-  return p;
+  const GCS = require("./gcs");
+  const objectPath = `scenes/${sceneId}/shot_${shotIndex}.jpg`;
+  await GCS.upload(objectPath, imageBytes, "image/jpeg");
+  return objectPath;
 }
 
 async function writeShotVideo(sceneId, shotIndex, videoBytes) {
-  const p = path.join(sceneDir(sceneId), `shot_${shotIndex}.mp4`);
-  await fs.promises.writeFile(p, videoBytes);
-  return p;
+  const GCS = require("./gcs");
+  const objectPath = `scenes/${sceneId}/shot_${shotIndex}.mp4`;
+  await GCS.upload(objectPath, videoBytes, "video/mp4");
+  return objectPath;
 }
 
 async function writeFinalVideo(sceneId, videoBytes) {
-  const p = path.join(sceneDir(sceneId), `final.mp4`);
-  await fs.promises.writeFile(p, videoBytes);
-  return p;
+  const GCS = require("./gcs");
+  const objectPath = `scenes/${sceneId}/final.mp4`;
+  await GCS.upload(objectPath, videoBytes, "video/mp4");
+  return objectPath;
 }
 
 function writeMeta(sceneId, meta) {

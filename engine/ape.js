@@ -632,14 +632,11 @@ async function runSlot() {
   if (W.paused || W.busy) return;
   W.busy = true; W.lastError = null;
   try {
-    // Adaptive slot advancement: when Truman is asleep (and thus most of the
-    // cast is), the sim burns through hours fast so the producer isn't wasting
-    // real-time on scenes nobody will watch. When Truman is awake, we slow to
-    // 1 sim-hour per slot so beats accumulate and captures are rich.
-    const worldHourNow = W.minutes / 60;
-    const trumanAsleep = worldHourNow < 6.75 || worldHourNow >= 22.5;
-    const slotMinutes = trumanAsleep ? 240 : 60;
-    W.slot++; W.minutes += slotMinutes;
+    // Consistent slot pacing — 30 sim-min per slot always. Clock advances
+    // smoothly; no jumps. When Truman is asleep, most turns will resolve as
+    // "asleep" (cheap agent turns, cheap dispose) so the sim still runs fast
+    // in real time without needing to skip sim-time.
+    W.slot++; W.minutes += CFG.SLOT_SIM_MINUTES;
     if (W.minutes >= 1440) {
       W.minutes -= 1440; W.day++; ledgerDrift(); W.reflectedDay = 0;
       // Advance location threads: some resolve, some step forward from
@@ -1779,7 +1776,7 @@ Render this specific moment: ${namedOccupants} in this exact room from the refer
           }];
         })(),
       };
-      STREAM_BUFFER.appendFrame(bytes, bufMeta);
+      await STREAM_BUFFER.appendFrame(bytes, bufMeta);
     } catch (e) {
       olog(`STREAM: buffer append failed — ${e.message.slice(0, 120)}`);
     }

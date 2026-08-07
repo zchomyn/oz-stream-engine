@@ -42,25 +42,43 @@ const server = http.createServer(async (req, res) => {
   if (streamUrl === "/stream/latest.jpg") {
     try {
       // Stream engine: serve from buffered playback ring. Consumer pointer
-      // advances every STREAM_PLAYBACK_MS. Frame that comes back is
-      // frozen for the entire ~6 seconds so different browser polls all see
-      // the same JPEG until the pointer advances.
+      // advances every STREAM_PLAYBACK_MS. We redirect to a signed GCS URL
+      // so bytes stream directly from Google's CDN, not through Railway.
       const STREAM_BUFFER = require("./stream_buffer");
-      const frame = STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
-      if (!frame) {
-        // No frames buffered yet — serve a 1x1 transparent placeholder.
+      const GCS = require("./gcs");
+      const info = STREAM_BUFFER.currentMeta(APE.CFG.STREAM_PLAYBACK_MS);
+      if (!info) {
         const placeholder = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
         res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
         return res.end(placeholder);
       }
-      res.writeHead(200, {
-        "Content-Type": "image/jpeg",
+      const objectPath = info.meta.objectPath || `buffer/frame_${String(info.index).padStart(8, "0")}.jpg`;
+      const url = await GCS.signedUrl(objectPath, 300);
+      if (!url) {
+        // Fall back to piping through us if signing fails
+        const frame = await STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
+        if (!frame?.bytes) {
+          const placeholder = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+          res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
+          return res.end(placeholder);
+        }
+        res.writeHead(200, {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "no-store, must-revalidate",
+          "Access-Control-Allow-Origin": "*",
+          "X-Stream-Index": String(frame.index),
+          "X-Stream-Backlog": String(frame.backlog),
+        });
+        return res.end(frame.bytes);
+      }
+      res.writeHead(302, {
+        "Location": url,
         "Cache-Control": "no-store, must-revalidate",
+        "X-Stream-Index": String(info.index),
+        "X-Stream-Backlog": String(info.backlog),
         "Access-Control-Allow-Origin": "*",
-        "X-Stream-Index": String(frame.index),
-        "X-Stream-Backlog": String(frame.backlog),
       });
-      return res.end(frame.bytes);
+      return res.end();
     } catch (e) {
       return json(res, 500, { error: e.message });
     }
@@ -68,12 +86,10 @@ const server = http.createServer(async (req, res) => {
   if (streamUrl === "/stream/status") {
     try {
       const STREAM_BUFFER = require("./stream_buffer");
-      const frame = STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
+      const info = STREAM_BUFFER.currentMeta(APE.CFG.STREAM_PLAYBACK_MS);
       const bufStat = STREAM_BUFFER.status();
       const snap = APE.snapshot();
-      // Subject data comes from the currently-playing frame's meta (what the
-      // viewer is watching), not from live sim state (which is minutes ahead).
-      const meta = frame?.meta || {};
+      const meta = info?.meta || {};
       const thoughts = meta.thoughts || [];
       return json(res, 200, {
         live: !snap.isPaused && bufStat.healthy,
@@ -82,10 +98,8 @@ const server = http.createServer(async (req, res) => {
         subject: meta.subject || "Truman Burbank",
         subjectLocation: meta.location || null,
         camLabel: meta.camLabel || null,
-        frameIndex: frame?.index ?? null,
-        // Buffered playback info
+        frameIndex: info?.index ?? null,
         buffer: bufStat,
-        // Chat sidebar payload
         thoughts,
       });
     } catch (e) {
@@ -592,48 +606,50 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // GET /api/moment/:id — serve a captured moment's hero image.
+  // GET /api/moment/:id — serve a captured moment's hero image from GCS.
   const momentMatch = u.match(/^\/api\/moment\/([^\/]+)$/);
   if (momentMatch && req.method === "GET") {
     const id = momentMatch[1];
-    const p = APE.MOMENT_STORE.heroPath(id);
-    if (!APE.MOMENT_STORE.exists(p)) return json(res, 404, { error: "moment not found or expired" });
-    const buf = require("fs").readFileSync(p);
-    res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*" });
-    return res.end(buf);
+    try {
+      const GCS = require("./gcs");
+      const bytes = await GCS.download(`moments/${id}/hero.jpg`);
+      if (!bytes) return json(res, 404, { error: "moment not found or expired" });
+      res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*" });
+      return res.end(bytes);
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
   }
 
-  // Serve a scene's shot still: /api/scene/:id/shot/:idx
+  // Serve a scene's shot still: /api/scene/:id/shot/:idx (from GCS)
   const sceneShotMatch = u.match(/^\/api\/scene\/([^\/]+)\/shot\/(\d+)$/);
   if (sceneShotMatch) {
     const sceneId = sceneShotMatch[1];
     const idx = parseInt(sceneShotMatch[2], 10);
-    const p = APE.SCENE_STORE.shotStillPath(sceneId, idx);
-    if (!APE.SCENE_STORE.exists(p)) return json(res, 404, { error: "shot not found" });
-    const buf = require("fs").readFileSync(p);
+    const GCS = require("./gcs");
+    const bytes = await GCS.download(`scenes/${sceneId}/shot_${idx}.jpg`);
+    if (!bytes) return json(res, 404, { error: "shot not found" });
     res.writeHead(200, { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400, immutable", "Access-Control-Allow-Origin": "*" });
-    return res.end(buf);
+    return res.end(bytes);
   }
-  // Serve a scene's animated shot: /api/scene/:id/video/:idx  (Chunk C output)
   const sceneVideoMatch = u.match(/^\/api\/scene\/([^\/]+)\/video\/(\d+)$/);
   if (sceneVideoMatch) {
     const sceneId = sceneVideoMatch[1];
     const idx = parseInt(sceneVideoMatch[2], 10);
-    const p = APE.SCENE_STORE.shotVideoPath(sceneId, idx);
-    if (!APE.SCENE_STORE.exists(p)) return json(res, 404, { error: "video not found" });
-    const buf = require("fs").readFileSync(p);
+    const GCS = require("./gcs");
+    const bytes = await GCS.download(`scenes/${sceneId}/shot_${idx}.mp4`);
+    if (!bytes) return json(res, 404, { error: "video not found" });
     res.writeHead(200, { "Content-Type": "video/mp4", "Cache-Control": "public, max-age=86400, immutable", "Access-Control-Allow-Origin": "*" });
-    return res.end(buf);
+    return res.end(bytes);
   }
-  // Serve the final edited scene video: /api/scene/:id/final  (Chunk C output)
   const sceneFinalMatch = u.match(/^\/api\/scene\/([^\/]+)\/final$/);
   if (sceneFinalMatch) {
     const sceneId = sceneFinalMatch[1];
-    const p = APE.SCENE_STORE.finalVideoPath(sceneId);
-    if (!APE.SCENE_STORE.exists(p)) return json(res, 404, { error: "final not found" });
-    const buf = require("fs").readFileSync(p);
+    const GCS = require("./gcs");
+    const bytes = await GCS.download(`scenes/${sceneId}/final.mp4`);
+    if (!bytes) return json(res, 404, { error: "final not found" });
     res.writeHead(200, { "Content-Type": "video/mp4", "Cache-Control": "public, max-age=86400, immutable", "Access-Control-Allow-Origin": "*" });
-    return res.end(buf);
+    return res.end(bytes);
   }
   if (u === "/api/campaigns" && req.method === "GET")
     return json(res, 200, { campaigns: APE.CAMPAIGNS.list() });
@@ -1411,6 +1427,40 @@ function renderStreamHtml() {
 </body>
 </html>`;
 }
+
+// Volume cleanup on boot. When GCS is configured we route new JPEG/MP4 writes
+// there, but old files from previous boots may still be filling /data. Sweep
+// them out so the volume doesn't stay at 100%. Only touches fat binary dirs;
+// world-state.json, story_state.json, world_ledger.json, and bible/ (small
+// asset registry) are preserved.
+(function volumeSweep() {
+  try {
+    const CFG = APE.CFG;
+    const root = require("path").dirname(CFG.SAVE_PATH);
+    const fs = require("fs");
+    const p = require("path");
+    const fatDirs = ["moments", "stream_buffer", "scenes", "shots", "dailies", "gcs_fallback"];
+    let freedBytes = 0;
+    for (const name of fatDirs) {
+      const dir = p.join(root, name);
+      if (!fs.existsSync(dir)) continue;
+      const walk = (d) => {
+        for (const n of fs.readdirSync(d)) {
+          const full = p.join(d, n);
+          const st = fs.statSync(full);
+          if (st.isDirectory()) { walk(full); try { fs.rmdirSync(full); } catch (_) {} }
+          else if (/\.(jpg|jpeg|png|mp4)$/i.test(n)) {
+            try { freedBytes += st.size; fs.unlinkSync(full); } catch (_) {}
+          }
+        }
+      };
+      walk(dir);
+    }
+    console.log(`[volume-sweep] freed ${(freedBytes / 1024 / 1024).toFixed(1)} MB from fat dirs`);
+  } catch (e) {
+    console.error("[volume-sweep] error:", e.message);
+  }
+})();
 
 APE.start();
 

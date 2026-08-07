@@ -404,7 +404,7 @@ function schedule(a, id) { // routine gates: who is out / asleep / in transit
   // where day 1 = Monday convention: (day+0) % 7 gives 1=Mon..6=Sat, 0=Sun.
   const dow = W.day % 7;
   const isWeekend = dow === 0 || dow === 6;
-
+  const isSunday = dow === 0;
   // Truman: walks Market Street to Seahaven Mutual, 8:20-8:30. At the
   // insurance office 8:30-17:00 with a 12:00-13:00 lunch break at the Good
   // Time Café. Walks home 17:00-17:10. Weekends home unless anchored event.
@@ -1320,35 +1320,34 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     }
     if (W.truthLog.length > 400) W.truthLog = W.truthLog.slice(-400);
 
-    // Recurring biweekly payday for Marcus (Ubisoft). First payday on day 5,
-    // then every 14 days thereafter. Lena's studio distribution offset by 7
-    // days so cash flow doesn't cluster. Both fire at ~5pm on their day.
+    // Recurring biweekly payday for Truman (Seahaven Mutual). First payday on
+    // day 5, then every 14 days thereafter. Meryl's hospital paycheck offset
+    // by 7 days so cash flow doesn't cluster. Both fire at ~5pm on their day.
     const PAYDAY_CYCLE = 14;
     if (W.minutes >= 17 * 60) {
-      // Marcus payday
+      // Truman payday
       if (!W.money.paydaysPaid) W.money.paydaysPaid = 0;
       const paydayNum = Math.floor((W.day - W.money.nextPayday.day) / PAYDAY_CYCLE) + 1;
       if (W.day >= W.money.nextPayday.day && paydayNum > W.money.paydaysPaid) {
         W.money.checking = Math.round((W.money.checking + W.money.nextPayday.amount) * 100) / 100;
         W.money.paydaysPaid = paydayNum;
-        W.money.note = `Marcus's Ubisoft biweekly pay landed on day ${W.day}: +$${W.money.nextPayday.amount}. Checking now $${W.money.checking}.`;
-        emitBeat({ slot: W.slot, day: W.day, time: clockStr(), location: "phones", text: `Direct deposit lands: Marcus's Ubisoft pay, $${W.money.nextPayday.amount}.`, actors: ["Marcus"], kind: "ambient" });
-        W.agents.marcus.inbox.push({ from: "Bank alert", text: `Direct deposit received: $${W.money.nextPayday.amount}.00. Available balance: $${W.money.checking}.` });
-        olog(`payday (Marcus #${paydayNum}): +$${W.money.nextPayday.amount}, balance $${W.money.checking}`);
+        W.money.note = `Truman's Seahaven Mutual biweekly pay landed on day ${W.day}: +$${W.money.nextPayday.amount}. Checking now $${W.money.checking}.`;
+        emitBeat({ slot: W.slot, day: W.day, time: clockStr(), location: "phones", text: `Direct deposit lands: Truman's Seahaven Mutual pay, $${W.money.nextPayday.amount}.`, actors: ["Truman"], kind: "ambient" });
+        if (W.agents.truman) W.agents.truman.inbox.push({ from: "Bank alert", text: `Direct deposit received: $${W.money.nextPayday.amount}.00. Available balance: $${W.money.checking}.` });
+        olog(`payday (Truman #${paydayNum}): +$${W.money.nextPayday.amount}, balance $${W.money.checking}`);
       }
-      // Lena's studio distribution — biweekly, offset by 7 days from Marcus,
-      // amount ~$3000 (annual $78k / 26 pay periods). First lands day 12.
-      if (!W.money.lenaPaydaysPaid) W.money.lenaPaydaysPaid = 0;
-      const LENA_AMOUNT = 3000;
-      const LENA_FIRST = 12;
-      const lenaPaydayNum = Math.floor((W.day - LENA_FIRST) / PAYDAY_CYCLE) + 1;
-      if (W.day >= LENA_FIRST && lenaPaydayNum > W.money.lenaPaydaysPaid) {
-        W.money.checking = Math.round((W.money.checking + LENA_AMOUNT) * 100) / 100;
-        W.money.lenaPaydaysPaid = lenaPaydayNum;
-        W.money.note = `Lena's Rue Saint-Ambroise Studio distribution landed on day ${W.day}: +$${LENA_AMOUNT}. Checking now $${W.money.checking}.`;
-        emitBeat({ slot: W.slot, day: W.day, time: clockStr(), location: "phones", text: `Direct deposit lands: Lena's studio distribution, $${LENA_AMOUNT}.`, actors: ["Lena"], kind: "ambient" });
-        W.agents.lena.inbox.push({ from: "Bank alert", text: `Direct deposit received: $${LENA_AMOUNT}.00. Available balance: $${W.money.checking}.` });
-        olog(`payday (Lena #${lenaPaydayNum}): +$${LENA_AMOUNT}, balance $${W.money.checking}`);
+      // Meryl's hospital paycheck — biweekly, offset by 7 days from Truman's.
+      if (!W.money.merylPaydaysPaid) W.money.merylPaydaysPaid = 0;
+      const MERYL_AMOUNT = 950;
+      const MERYL_FIRST = 12;
+      const merylPaydayNum = Math.floor((W.day - MERYL_FIRST) / PAYDAY_CYCLE) + 1;
+      if (W.day >= MERYL_FIRST && merylPaydayNum > W.money.merylPaydaysPaid) {
+        W.money.checking = Math.round((W.money.checking + MERYL_AMOUNT) * 100) / 100;
+        W.money.merylPaydaysPaid = merylPaydayNum;
+        W.money.note = `Meryl's Seahaven Community Hospital pay landed on day ${W.day}: +$${MERYL_AMOUNT}. Checking now $${W.money.checking}.`;
+        emitBeat({ slot: W.slot, day: W.day, time: clockStr(), location: "phones", text: `Direct deposit lands: Meryl's hospital pay, $${MERYL_AMOUNT}.`, actors: ["Meryl"], kind: "ambient" });
+        if (W.agents.meryl) W.agents.meryl.inbox.push({ from: "Bank alert", text: `Direct deposit received: $${MERYL_AMOUNT}.00. Available balance: $${W.money.checking}.` });
+        olog(`payday (Meryl #${merylPaydayNum}): +$${MERYL_AMOUNT}, balance $${W.money.checking}`);
       }
     }
     // bills auto-debit on their due day, each ~30 sim-day cycle.
@@ -1368,7 +1367,7 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
         b.lastPaidDay = W.day;
         W.money.checking = Math.round((W.money.checking - b.amount) * 100) / 100;
         W.money.note = `${b.name} ($${b.amount}) auto-debited day ${W.day}. Checking now $${W.money.checking}.`;
-        W.agents.marcus.inbox.push({ from: "Bank alert", text: `Pre-authorized debit: ${b.name} $${b.amount}.00. Available balance: $${W.money.checking}.` });
+        if (W.agents.truman) W.agents.truman.inbox.push({ from: "Bank alert", text: `Pre-authorized debit: ${b.name} $${b.amount}.00. Available balance: $${W.money.checking}.` });
         olog(`bill debited: ${b.name} $${b.amount}, balance $${W.money.checking}`);
       }
     }

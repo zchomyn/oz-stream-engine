@@ -49,6 +49,20 @@ const RATE_LIMITED_KEYWORDS = [
   "collar", "tie",
 ];
 
+// Word-overlap similarity between two normalized action strings. Simple
+// Jaccard-style overlap — catches near-duplicate beats even when the LLM
+// paraphrases slightly ("holding the mayo jar" vs "still holding the mayo")
+// which an exact-string match would miss entirely.
+function wordOverlap(a, b) {
+  if (!a || !b) return 0;
+  const wordsA = new Set(a.split(" ").filter((w) => w.length > 2));
+  const wordsB = new Set(b.split(" ").filter((w) => w.length > 2));
+  if (!wordsA.size || !wordsB.size) return 0;
+  let shared = 0;
+  for (const w of wordsA) if (wordsB.has(w)) shared++;
+  return shared / Math.min(wordsA.size, wordsB.size);
+}
+
 function scoreSubject(agent, key, W, recentCaptures) {
   if (agent.asleep) return -30;
   let score = 0;
@@ -74,12 +88,27 @@ function scoreSubject(agent, key, W, recentCaptures) {
   // Truman is the hero
   if (key === "truman") score += 5;
 
-  // Anti-repetition: if this subject was captured recently, penalize
+  // Anti-repetition: same subject captured recently — now escalates from
+  // the FIRST recent occurrence, not just the second. Fast render throughput
+  // means a subject can be re-eligible within seconds; without this, a
+  // mundane stretch (the world's own dull moments) gets faithfully captured
+  // over and over just because a new slot number ticked over.
   const recentSameSubj = recentCaptures.filter((r) => r.subjectKey === key).length;
-  if (recentSameSubj >= 2) score -= 25;
+  if (recentSameSubj >= 1) score -= 20;
+  if (recentSameSubj >= 2) score -= 45;
+
+  // Near-duplicate detection: compare current action against THIS subject's
+  // own most recent capture (word overlap, not exact match — catches
+  // paraphrased restatements of the same stale beat).
+  const actNormalized = act.replace(/[^a-z ]/g, "").trim();
+  const mySelfRecent = recentCaptures.filter((r) => r.subjectKey === key);
+  if (mySelfRecent.length) {
+    const mostRecentMine = mySelfRecent[mySelfRecent.length - 1];
+    const overlap = wordOverlap(actNormalized, mostRecentMine.actNormalized || "");
+    if (overlap >= 0.5) score -= 35;   // heavily discourage re-shooting an unchanged beat
+  }
 
   // Anti-repetition: if the current lastAct matches a recent capture's, hard penalty
-  const actNormalized = act.replace(/[^a-z ]/g, "").trim();
   if (actNormalized && recentCaptures.some((r) => r.actNormalized === actNormalized)) {
     score -= 15;
   }

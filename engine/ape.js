@@ -1286,8 +1286,23 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
       const item = DELIVERY.peekTodayDelivery();
       if (item && !W.agents.truman?.asleep) {
         W.pendingInjection = DELIVERY.deliveryInjectionText(item);
+        // Directly create the object in world state rather than relying on
+        // the disposer to infer its existence purely from narrated text.
+        // The disposer is (rightly) cautious about creating objects from
+        // inference alone — it's the same mechanism that rejects hallucinated
+        // objects. Since we KNOW definitively what was delivered, register
+        // it immediately so it's real and trackable from the start. Truman's
+        // subsequent turns / the disposer's normal object_changes can then
+        // MOVE it wherever he decides (mantel, closet, worn, wherever) —
+        // that's the disposer's proper job, not inventing the item itself.
+        W.objects = W.objects || [];
+        W.objects.push({
+          name: item,
+          at: "front porch",
+          state: "just delivered, still in its box",
+        });
         DELIVERY.confirmDelivered();
-        olog(`DELIVERY: today's item — "${item}" — injected`);
+        olog(`DELIVERY: today's item — "${item}" — injected and registered in world state`);
       }
     } catch (e) {
       olog(`DELIVERY error: ${String(e.message).slice(0, 120)}`);
@@ -2575,7 +2590,7 @@ async function startAutoCaptureLoop() {
             actNormalized: String(pick.agent.lastAct || "")
               .toLowerCase().replace(/[^a-z ]/g, "").trim(),
           });
-          if (recentDirectorSignals.length > 10) recentDirectorSignals.shift();
+          if (recentDirectorSignals.length > 24) recentDirectorSignals.shift();
         } else if (r?.error) {
           olog(`STREAM: capture skipped — ${String(r.error).slice(0, 120)}`);
           await new Promise((r) => setTimeout(r, 2000));

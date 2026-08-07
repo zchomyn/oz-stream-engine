@@ -1062,6 +1062,18 @@ button{cursor:pointer}button:hover{border-color:var(--acc)}
 <button onclick="ctl('toggleRender')" id="rbtn">🎬</button>
 <button onclick="if(confirm('wipe world?'))ctl('reset')" style="border-color:#553">reset</button>
 <span id="err" class="err"></span></div>
+<div id="brandLauncher" style="display:flex;gap:8px;align-items:center;padding:10px 16px;background:#0d0d0f;border-bottom:1px solid #222;flex-wrap:wrap;">
+  <span style="color:#888;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;">Brand drop</span>
+  <input id="brandName" placeholder="Brand (e.g. Starbucks)" style="width:140px">
+  <input id="brandProduct" placeholder="Product (e.g. Pumpkin Spice Latte)" style="width:200px">
+  <select id="brandStyle">
+    <option value="mention">Casual mention — someone brings it up in conversation</option>
+    <option value="visit">Visit — a character goes there / picks it up</option>
+    <option value="delivery">Delivery — it shows up at the house or the store</option>
+  </select>
+  <button onclick="brandDrop()" style="background:#00704A;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;">☆ Drop into Seahaven</button>
+  <span id="brandDropStatus" style="color:#888;font-size:11px;"></span>
+</div>
 <div class="grid" id="chars"></div>
 <div class="row2"><div class="card"><div class="faint" style="margin-bottom:6px">GROUND TRUTH LOG (what actually happened)</div><div class="log" id="log"></div>
 <div class="faint" style="margin:12px 0 6px">TRUTH vs MEMORY (the measurable gap)</div><div class="tvm" id="tvm"></div></div>
@@ -1072,6 +1084,38 @@ function api(p){return Q?p+'?code='+encodeURIComponent(Q):p}
 function setSpd(v){fetch(api('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({speedMs:+v})})}
 function ctl(a){fetch(api('/api/control'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:a})})}
 function inject(){const t=document.getElementById('inj').value.trim();if(t)fetch(api('/api/inject'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}).then(()=>document.getElementById('inj').value='')}
+function brandDrop(){
+  const brand = document.getElementById('brandName').value.trim();
+  const product = document.getElementById('brandProduct').value.trim();
+  const style = document.getElementById('brandStyle').value;
+  const statusEl = document.getElementById('brandDropStatus');
+  if (!brand) { statusEl.textContent = 'enter a brand name first'; return; }
+  let line;
+  if (style === 'mention') {
+    line = product
+      ? \`Someone in Seahaven mentions \${brand}'s \${product} in passing conversation — it comes up naturally, like something they saw an ad for or heard a neighbor talk about.\`
+      : \`Someone in Seahaven mentions \${brand} in passing conversation — it comes up naturally, like something they saw an ad for or heard a neighbor talk about.\`;
+  } else if (style === 'visit') {
+    line = product
+      ? \`A character decides to go pick up \${product} from \${brand} — it's on their mind and they make a point of stopping by today.\`
+      : \`A character decides to stop by \${brand} today — it's on their mind and they make a point of going.\`;
+  } else {
+    line = product
+      ? \`A \${brand} delivery arrives in Seahaven — \${product} shows up at the house or at the corner store, freshly delivered.\`
+      : \`A \${brand} delivery arrives in Seahaven today, noticed by whoever's around.\`;
+  }
+  statusEl.textContent = 'dropping in...';
+  fetch(api('/api/inject'), {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({text: line})
+  }).then(r => r.json()).then(d => {
+    statusEl.textContent = '✓ dropped — watch the next slot or two';
+    setTimeout(() => { statusEl.textContent = ''; }, 4000);
+  }).catch(e => {
+    statusEl.textContent = 'failed — ' + e.message;
+  });
+}
 function env(){fetch(api('/api/env'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({weather:document.getElementById('wx').value,headline:document.getElementById('hl').value.trim()})})}
 function esc(s){return (s||'').replace(/</g,'&lt;')}
 async function tick(){try{const s=await(await fetch(api('/api/state'))).json();

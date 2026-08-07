@@ -664,6 +664,31 @@ function ritualPressure(a, id) {
       ];
       return ritual(walkRotation[W.day % walkRotation.length]);
     }
+    // OFFICE HOURS — was previously a total gap in ritual content, which
+    // combined with the schedule() "away" bug meant Truman effectively
+    // never had anything grounded to do at work. Real office texture now.
+    if (h >= 8.5 && h < 12) {
+      const morningOfficeRotation = [
+        "at his desk at Seahaven Mutual — a stack of claims forms to process, the radiator ticking, Larry two desks over on the phone",
+        "at his desk — Mr. Ferris stops by with a question about a file, brief and businesslike, then moves on",
+        "at his desk, mid-paperwork — glances up at the wall clock more than once, catches himself doing it",
+        "at his desk — the phone rings, a routine call about a policy, handled in under a minute",
+        "at his desk — Larry leans over to complain about the coffee in the break room, same joke as always",
+        "at his desk, a rare quiet stretch — gets through more paperwork than usual, almost enjoys the rhythm of it",
+      ];
+      return ritual(morningOfficeRotation[W.day % morningOfficeRotation.length]);
+    }
+    if (h >= 13 && h < 17) {
+      const afternoonOfficeRotation = [
+        "back at his desk after lunch — the afternoon claims pile, Mr. Ferris's door closed for a call",
+        "at his desk — Larry shows him something in the newspaper on his break, a small distraction from the forms",
+        "at his desk, afternoon slowing down — a form he keeps having to redo, minor and irritating",
+        "at his desk — someone's radio down the hall playing low, a song he half-recognizes",
+        "at his desk — finishes a stack early, allows himself a minute looking out the window at Market Street before starting the next one",
+        "at his desk — Mr. Ferris passes through the floor, a nod exchanged, nothing more",
+      ];
+      return ritual(afternoonOfficeRotation[W.day % afternoonOfficeRotation.length]);
+    }
     if (h >= 12 && h < 13)       return ritual("lunch at the Good Time Café — same booth by the window, meatloaf sandwich or the tuna melt, coffee, sometimes Marlon drops by mid-route");
     if (h >= 17.2 && h < 17.5)   return ritual("just walked in from work — hang the jacket in the front hallway, wallet on the sideboard, kiss Meryl if she's home");
     if (h >= 18 && h < 18.75)    return ritual("DINNER WITH MERYL: kitchen table, whatever Meryl's put together (chicken, pot roast, the pasta bake). Sit together. Talk — about the day at the office, about her shift. This is a shared-room moment");
@@ -685,6 +710,20 @@ function ritualPressure(a, id) {
     }
     if (h >= 7.15 && h < 7.5)    return ritual("BREAKFAST WITH TRUMAN: kitchen table. Cheerful. Something bright, on-brand, on-script — mention Chef's Pal salad-dressing or Kaiser Chicken if it fits naturally");
     if (h >= 7.25 && h < 7.5)    return ritual("walking to the hospital — clip badge on, brace for the shift");
+    // HOSPITAL SHIFT — was previously a total gap, same issue Truman's
+    // office had. Real texture now that she gets a genuine turn while
+    // stationed there.
+    if (h >= 7.5 && h < 16) {
+      const shiftRotation = [
+        "on shift — checking charts on the ward, brisk and capable, the version of herself the hospital sees",
+        "on shift — a quiet stretch at the nurses' station, catching up on paperwork",
+        "on shift — helping a patient who's anxious about something small, the calm voice she's good at",
+        "on shift — a doctor asks her opinion on something, she gives it plainly, he takes it",
+        "on shift — the ward is busier than usual today, moves fast, doesn't stop for long",
+        "on shift — a rare lull, leans against the counter for a minute before the next thing",
+      ];
+      return ritual(shiftRotation[W.day % shiftRotation.length]);
+    }
     if (h >= 16 && h < 17)       return ritual("just home from the shift — kick off the sneakers, put the kettle on, sit for ten quiet minutes before starting anything");
     if (h >= 17 && h < 18)       return ritual("start dinner — pull ingredients from the fridge, use the oven or the stove, make something wholesome");
     if (h >= 18 && h < 18.75)    return ritual("DINNER WITH TRUMAN: sit together, ask about his day, watch how he responds, keep the tone even");
@@ -785,7 +824,23 @@ async function runSlot() {
     for (const [id, a] of Object.entries(W.agents)) {
       const s = schedule(a, id);
       a.asleep = !!s.asleep;
-      if (s.away) { a.location = s.away; continue; }
+      if (s.away) {
+        a.location = s.away;
+        // Leads (Truman, Meryl) still get a REAL agent turn while stationed
+        // at a stationary away location (the office, the café) — otherwise
+        // their think/dialogue freezes at whatever they were last doing
+        // before leaving, badly mismatched against their new location
+        // (captured 'at work' but still narrating something from
+        // breakfast — the exact bug reported). Transitional walking states
+        // ("walking to work", "walking home from work") still skip a turn —
+        // those are brief passthrough beats, and letting them fall through
+        // here would collide with the "coming home" detection right below,
+        // which depends on catching those exact strings. Supporting cast
+        // stays skipped entirely while away, to control LLM call volume —
+        // can extend to them later if it's worth the cost.
+        const isTransitional = /walking|route/i.test(s.away);
+        if ((id !== "truman" && id !== "meryl") || isTransitional) continue;
+      }
       if (a.location.includes("work") || a.location.includes("school") || a.location.includes("walking home") || a.location.includes("bus on the way home")) {
         // Coming home: register a residue from the location they're leaving so
         // evening beats can reference the day.

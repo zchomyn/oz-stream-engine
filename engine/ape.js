@@ -1241,6 +1241,26 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     // 4) REFLECT nightly
     if (W.minutes >= CFG.REFLECT_HOUR * 60 && W.reflectedDay !== W.day) { W.reflectedDay = W.day; await reflectAll(); }
 
+    // 4b) DELIVERY QUEUE — public "send Truman something" feature. Once per
+    // real calendar day, at the morning delivery hour, check if today has a
+    // claimed-but-undelivered item and inject it naturally. Gated on
+    // real-world date (not sim date) since the whole feature is "check back
+    // tomorrow" against real time.
+    const worldHourNow = W.minutes / 60;
+    if (worldHourNow >= 7 && worldHourNow < 7.5 && W.__deliveryResolvedRealDate !== new Date().toISOString().slice(0, 10)) {
+      try {
+        const DELIVERY = require("./delivery_queue");
+        const item = DELIVERY.resolveTodayDelivery();
+        W.__deliveryResolvedRealDate = new Date().toISOString().slice(0, 10);
+        if (item) {
+          W.pendingInjection = DELIVERY.deliveryInjectionText(item);
+          olog(`DELIVERY: today's item — "${item}" — injected for this morning`);
+        }
+      } catch (e) {
+        olog(`DELIVERY error: ${String(e.message).slice(0, 120)}`);
+      }
+    }
+
     // 5) STORY OBSERVE — the story engine decides when it's ready to run.
     // Non-blocking so it doesn't hold up the tick loop.
     if (W.__storyObservedDay !== W.day) {

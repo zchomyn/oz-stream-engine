@@ -90,6 +90,34 @@ const server = http.createServer(async (req, res) => {
       return json(res, 500, { error: e.message });
     }
   }
+
+  // GET /stream/deliveries?days=10 — public. List upcoming delivery slots
+  // (real calendar dates) and whether each is claimed. No auth — this is a
+  // public viewer feature.
+  if (streamUrl === "/stream/deliveries" && req.method === "GET") {
+    try {
+      const DELIVERY = require("./delivery_queue");
+      const days = Math.min(30, Math.max(1, parseInt(new URL(req.url, "http://x").searchParams.get("days") || "10", 10)));
+      return json(res, 200, { slots: DELIVERY.listSlots(days) });
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
+
+  // POST /stream/deliveries/claim { date, item } — public. Claims an open
+  // delivery slot. Basic content moderation applied server-side.
+  if (streamUrl === "/stream/deliveries/claim" && req.method === "POST") {
+    try {
+      const DELIVERY = require("./delivery_queue");
+      const b = await body(req);
+      const result = DELIVERY.claimSlot(b.date, b.item);
+      if (!result.ok) return json(res, 400, result);
+      return json(res, 200, result);
+    } catch (e) {
+      return json(res, 500, { error: e.message });
+    }
+  }
+
   if (streamUrl === "/stream/status") {
     try {
       const STREAM_BUFFER = require("./stream_buffer");
@@ -1340,6 +1368,62 @@ function renderStreamHtml() {
     }
     #stage { padding-right: 340px; transition: padding-right 0.3s; }
     #placeholder { color: #666; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; text-align: center; padding: 20px; }
+
+    /* Delivery feature — "send Truman something" */
+    #delivery-toggle {
+      position: fixed; bottom: 24px; left: 24px; z-index: 25;
+      padding: 10px 16px; background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 4px; font-size: 11px; letter-spacing: 0.15em; color: #f4f4f4;
+      cursor: pointer; user-select: none; transition: background 0.2s, border-color 0.2s;
+    }
+    #delivery-toggle:hover { background: rgba(0,0,0,0.85); border-color: rgba(255,255,255,0.3); }
+    #delivery-panel {
+      position: fixed; bottom: 24px; left: 24px; z-index: 30;
+      width: 340px; max-height: 70vh; overflow-y: auto;
+      background: rgba(10,10,12,0.94); border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 8px; padding: 16px; backdrop-filter: blur(8px);
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    #delivery-panel.hidden { display: none; }
+    #delivery-header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; letter-spacing: 0.2em; color: #f4f4f4; margin-bottom: 8px;
+    }
+    #delivery-close { cursor: pointer; color: #888; padding: 2px 6px; }
+    #delivery-close:hover { color: #f4f4f4; }
+    #delivery-sub { font-size: 11px; color: #999; line-height: 1.5; margin-bottom: 14px; }
+    #delivery-slots { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+    .delivery-slot {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 10px; border-radius: 4px; font-size: 11.5px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    }
+    .delivery-slot.open { cursor: pointer; border-color: rgba(90,200,120,0.3); }
+    .delivery-slot.open:hover { background: rgba(90,200,120,0.08); border-color: rgba(90,200,120,0.5); }
+    .delivery-slot.claimed { color: #888; }
+    .delivery-slot.delivered { color: #5ac878; }
+    .delivery-slot .ds-date { color: #d4d4d4; font-weight: 600; }
+    .delivery-slot.claimed .ds-date, .delivery-slot.delivered .ds-date { color: #888; }
+    .delivery-slot .ds-item { color: #888; font-style: italic; text-align: right; flex: 1; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .delivery-slot .ds-badge { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #5ac878; margin-left: 8px; }
+    #delivery-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+    #delivery-form-date { font-size: 11px; color: #d4d4d4; margin-bottom: 8px; letter-spacing: 0.05em; }
+    #delivery-item {
+      width: 100%; padding: 8px 10px; margin-bottom: 8px; font-size: 12px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 4px; color: #f4f4f4; font-family: inherit;
+    }
+    #delivery-item::placeholder { color: #666; }
+    #delivery-form button {
+      width: 100%; padding: 8px; background: #2a5f3f; color: #f4f4f4; border: none;
+      border-radius: 4px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; font-family: inherit;
+    }
+    #delivery-form button:hover { background: #357a4f; }
+    #delivery-status { font-size: 10.5px; color: #999; margin-top: 6px; min-height: 14px; }
+    @media (max-width: 768px) {
+      #delivery-panel { width: calc(100vw - 48px); max-height: 60vh; }
+    }
   </style>
 </head>
 <body>
@@ -1364,6 +1448,21 @@ function renderStreamHtml() {
     <div id="chat-header">TRANSMISSIONS</div>
     <div id="chat-feed"></div>
   </aside>
+  <div id="delivery-toggle" onclick="toggleDelivery()">📦 SEND TRUMAN SOMETHING</div>
+  <div id="delivery-panel" class="hidden">
+    <div id="delivery-header">
+      <span>SEND TRUMAN SOMETHING</span>
+      <span id="delivery-close" onclick="toggleDelivery()">✕</span>
+    </div>
+    <div id="delivery-sub">Pick an open day. One item, one delivery, next morning — everyone watching will see what he does with it.</div>
+    <div id="delivery-slots"></div>
+    <div id="delivery-form" style="display:none">
+      <div id="delivery-form-date"></div>
+      <input id="delivery-item" placeholder="what should he receive? (e.g. a rubber duck, a red sweater)" maxlength="80">
+      <button onclick="submitDelivery()">Send it</button>
+      <div id="delivery-status"></div>
+    </div>
+  </div>
 <script>
 (async function () {
   const frameEl = document.getElementById('frame');
@@ -1485,6 +1584,92 @@ function renderStreamHtml() {
   refreshStatus();
   setInterval(refreshStatus, 1000);
 })();
+
+// Delivery panel — "send Truman something." Separate small IIFE-free
+// top-level functions since they're wired via onclick attributes.
+let deliverySelectedDate = null;
+function toggleDelivery() {
+  const panel = document.getElementById('delivery-panel');
+  const toggle = document.getElementById('delivery-toggle');
+  const opening = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  toggle.style.display = opening ? 'none' : 'block';
+  if (opening) loadDeliverySlots();
+}
+async function loadDeliverySlots() {
+  const container = document.getElementById('delivery-slots');
+  container.innerHTML = '<div style="color:#666;font-size:11px;">loading...</div>';
+  try {
+    const r = await fetch('/stream/deliveries?days=10');
+    const d = await r.json();
+    container.innerHTML = '';
+    const fmt = (dateStr) => {
+      const dt = new Date(dateStr + 'T00:00:00');
+      return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+    for (const slot of (d.slots || [])) {
+      const row = document.createElement('div');
+      row.className = 'delivery-slot ' + (slot.delivered ? 'delivered' : slot.claimed ? 'claimed' : 'open');
+      const dateEl = document.createElement('span');
+      dateEl.className = 'ds-date';
+      dateEl.textContent = (slot.isToday ? 'Today · ' : '') + fmt(slot.date);
+      row.appendChild(dateEl);
+      if (slot.claimed) {
+        const itemEl = document.createElement('span');
+        itemEl.className = 'ds-item';
+        itemEl.textContent = slot.item;
+        row.appendChild(itemEl);
+        if (slot.delivered) {
+          const badge = document.createElement('span');
+          badge.className = 'ds-badge';
+          badge.textContent = '✓ delivered';
+          row.appendChild(badge);
+        }
+      } else {
+        const openEl = document.createElement('span');
+        openEl.className = 'ds-item';
+        openEl.textContent = 'open — tap to claim';
+        row.appendChild(openEl);
+        row.onclick = () => selectDeliveryDate(slot.date, fmt(slot.date));
+      }
+      container.appendChild(row);
+    }
+  } catch (e) {
+    container.innerHTML = '<div style="color:#a55;font-size:11px;">couldn\\'t load — try again</div>';
+  }
+}
+function selectDeliveryDate(date, label) {
+  deliverySelectedDate = date;
+  document.getElementById('delivery-form').style.display = 'block';
+  document.getElementById('delivery-form-date').textContent = 'Sending for ' + label + ':';
+  document.getElementById('delivery-item').value = '';
+  document.getElementById('delivery-status').textContent = '';
+  document.getElementById('delivery-item').focus();
+}
+async function submitDelivery() {
+  const item = document.getElementById('delivery-item').value.trim();
+  const statusEl = document.getElementById('delivery-status');
+  if (!deliverySelectedDate) { statusEl.textContent = 'pick a date first'; return; }
+  if (!item) { statusEl.textContent = 'type something to send him'; return; }
+  statusEl.textContent = 'sending...';
+  try {
+    const r = await fetch('/stream/deliveries/claim', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ date: deliverySelectedDate, item })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      statusEl.textContent = '✓ sent! Check back that morning to see what he does with it.';
+      document.getElementById('delivery-form').style.display = 'none';
+      loadDeliverySlots();
+    } else {
+      statusEl.textContent = d.error || 'something went wrong';
+    }
+  } catch (e) {
+    statusEl.textContent = 'network error — try again';
+  }
+}
 </script>
 </body>
 </html>`;

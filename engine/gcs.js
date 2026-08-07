@@ -26,6 +26,9 @@ function init() {
   const bucketName = process.env.GCS_BUCKET;
   const projectId = process.env.GCS_PROJECT_ID;
 
+  // Diagnostic breadcrumbs — helps tell which piece is missing
+  console.log(`[gcs] init diagnostic — credsRaw:${credsRaw ? "present(" + credsRaw.length + " chars)" : "MISSING"} bucket:${bucketName || "MISSING"} project:${projectId || "MISSING"}`);
+
   if (!credsRaw || !bucketName) {
     // Fall back to local disk
     const CFG = require("./config");

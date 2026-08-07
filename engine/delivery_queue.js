@@ -105,17 +105,35 @@ function claimSlot(date, itemText) {
   return { ok: true, date, item: mod.text };
 }
 
-// Called once per real day, at the sim's morning-delivery hour. Returns the
-// item text to inject if today has an unclaimed-but-undelivered slot, else
-// null. Marks delivered=true so it only fires once.
-function resolveTodayDelivery() {
+// Peek at today's claimed-but-undelivered item without marking it delivered.
+// Caller should check conditions (e.g. is the subject awake) before calling
+// confirmDelivered().
+function peekTodayDelivery() {
   const today = todayKey();
   const entry = QUEUE[today];
   if (!entry || entry.delivered) return null;
+  return entry.item;
+}
+
+// Mark today's delivery as actually delivered. Call only after actually
+// injecting it.
+function confirmDelivered() {
+  const today = todayKey();
+  const entry = QUEUE[today];
+  if (!entry) return;
   entry.delivered = true;
   entry.deliveredAt = Date.now();
   persist();
-  return entry.item;
+}
+
+// Convenience wrapper kept for compatibility — peeks and immediately
+// confirms. Prefer peekTodayDelivery()/confirmDelivered() when the caller
+// needs to gate on conditions (like the subject being awake) before
+// committing to "delivered."
+function resolveTodayDelivery() {
+  const item = peekTodayDelivery();
+  if (item) confirmDelivered();
+  return item;
 }
 
 // Build the injection instruction for a claimed item. The instruction stays
@@ -125,13 +143,15 @@ function resolveTodayDelivery() {
 // establish that a labeled package with this specific item inside arrives
 // and Truman brings it in.
 function deliveryInjectionText(item) {
-  return `A small parcel arrives on the front porch this morning — a real box, plainly labeled, containing: ${item}. Truman notices it, brings it inside, and opens it. He reacts to it and decides what to actually do with it in a way that makes sense for what it is — wear it if it's something wearable, eat it if it's food, display it somewhere in the house if it's an object, use it if it's a gadget, bring it to the office if that's where it belongs. Play this out naturally over the next couple of turns — his reaction, his choice of what to do with it, and where it ends up.`;
+  return `There's a knock at the door — a delivery driver has dropped off a small parcel, plainly labeled, containing: ${item}. Truman answers, brings it inside, and opens it right there. He reacts to it and decides what to actually do with it in a way that makes sense for what it is — wear it if it's something wearable, eat it if it's food, display it somewhere in the house if it's an object, use it if it's a gadget, bring it to the office if that's where it belongs. Play this out naturally over the next couple of turns — his reaction, his choice of what to do with it, and where it ends up.`;
 }
 
 module.exports = {
   listSlots,
   claimSlot,
   resolveTodayDelivery,
+  peekTodayDelivery,
+  confirmDelivered,
   deliveryInjectionText,
   todayKey,
   moderate,   // exported for testing

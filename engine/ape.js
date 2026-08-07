@@ -1273,24 +1273,24 @@ ${campaignLines.map((l) => "  - " + l).join("\n")}`;
     // 4) REFLECT nightly
     if (W.minutes >= CFG.REFLECT_HOUR * 60 && W.reflectedDay !== W.day) { W.reflectedDay = W.day; await reflectAll(); }
 
-    // 4b) DELIVERY QUEUE — public "send Truman something" feature. Once per
-    // real calendar day, at the morning delivery hour, check if today has a
-    // claimed-but-undelivered item and inject it naturally. Gated on
-    // real-world date (not sim date) since the whole feature is "check back
-    // tomorrow" against real time.
-    const worldHourNow = W.minutes / 60;
-    if (worldHourNow >= 7 && worldHourNow < 7.5 && W.__deliveryResolvedRealDate !== new Date().toISOString().slice(0, 10)) {
-      try {
-        const DELIVERY = require("./delivery_queue");
-        const item = DELIVERY.resolveTodayDelivery();
-        W.__deliveryResolvedRealDate = new Date().toISOString().slice(0, 10);
-        if (item) {
-          W.pendingInjection = DELIVERY.deliveryInjectionText(item);
-          olog(`DELIVERY: today's item — "${item}" — injected for this morning`);
-        }
-      } catch (e) {
-        olog(`DELIVERY error: ${String(e.message).slice(0, 120)}`);
+    // 4b) DELIVERY QUEUE — public "send Truman something" feature. Checked
+    // every slot (not gated to a specific sim hour — that caused multi-hour
+    // real-world delays depending where the sim clock happened to sit).
+    // Delivers within the next slot or two of being claimed — a real "knock
+    // at the door" soon after someone sends something, not "wait until
+    // tomorrow morning." Still one claim per real calendar day (the queue's
+    // claimSlot() enforces that) — this just fixes HOW FAST a claimed item
+    // actually lands once it's been sent.
+    try {
+      const DELIVERY = require("./delivery_queue");
+      const item = DELIVERY.peekTodayDelivery();
+      if (item && !W.agents.truman?.asleep) {
+        W.pendingInjection = DELIVERY.deliveryInjectionText(item);
+        DELIVERY.confirmDelivered();
+        olog(`DELIVERY: today's item — "${item}" — injected`);
       }
+    } catch (e) {
+      olog(`DELIVERY error: ${String(e.message).slice(0, 120)}`);
     }
 
     // 5) STORY OBSERVE — the story engine decides when it's ready to run.

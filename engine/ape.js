@@ -2622,12 +2622,9 @@ async function startAutoCaptureLoop() {
     return awake[rotationIdx % awake.length];
   };
   const oneWorker = async () => {
-    const capturedThisSlot = new Set();
     let currentGateSlot = -1;
     const STREAM_BUFFER = require("./stream_buffer");
     const STREAM_DIRECTOR = require("./stream_director");
-    // Track the last 5 subject+action pairs so the director enforces variety
-    const recentDirectorSignals = [];
     while (W.__autoCaptureLoopRunning && CFG.STREAM_AUTO_CAPTURE) {
       // Wait for boot bootstraps to finish — portraits and plates must be
       // in BIBLE before we render captures against them.
@@ -2656,7 +2653,9 @@ async function startAutoCaptureLoop() {
       }
       const dedupKey = `${W.slot}:${pick.key}`;
       if (capturedThisSlot.has(dedupKey)) {
-        // Same slot + same subject already shot — wait for state to advance
+        // Same slot + same subject already shot (by this worker OR another
+        // parallel worker — this Set is now shared across all of them) —
+        // wait for state to advance
         await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
@@ -2692,6 +2691,14 @@ async function startAutoCaptureLoop() {
       }
     }
   };
+  // SHARED across all parallel workers — this is the fix. Previously each
+  // worker had its own private copy of both, so with 4 parallel workers,
+  // all 4 could independently pick and capture the SAME top-scoring subject
+  // in the SAME slot, each blind to what the others had just done. That's
+  // why Meryl (scoring 111) was getting captured 3-4 times in a single slot
+  // while lower-scoring subjects never got a turn.
+  const capturedThisSlot = new Set();
+  const recentDirectorSignals = [];
   for (let i = 0; i < parallel; i++) oneWorker();
 }
 

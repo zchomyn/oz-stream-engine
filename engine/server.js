@@ -127,7 +127,8 @@ const server = http.createServer(async (req, res) => {
       const meta = info?.meta || {};
       const thoughts = meta.thoughts || [];
       return json(res, 200, {
-        live: !snap.isPaused && bufStat.healthy,
+        live: !snap.isPaused,
+        bufferHealthy: bufStat.healthy,
         day: meta.day || snap.day,
         clock: meta.clock || snap.clock,
         subject: meta.subject || "Truman Burbank",
@@ -1542,6 +1543,10 @@ function renderStreamHtml() {
       if (d.subjectLocation) subjectEl.textContent = 'SUBJECT: TRUMAN · ' + d.subjectLocation.toUpperCase();
       liveEl.textContent = d.live ? 'LIVE' : 'PAUSED';
       liveEl.style.opacity = d.live ? 1 : 0.5;
+      // Buffer thinness is NOT the same as paused — it's normal, temporary
+      // fluctuation, not the world stopping. Only show the subtle
+      // "NEXT SCENE" chip for it (existing logic below), never the LIVE/
+      // PAUSED label.
 
       // Detect new frame. If latestMomentId changed, refresh image immediately
       // AND reset the stale timer.

@@ -206,7 +206,7 @@ ${events}
 Do this in order:
 1. PERCEIVE each indexed event above (and each delivered text) as ${agent.name} would — memory in your words, ledger deltas for people involved, a self-appraisal shift, a stress shift. The same dinner becomes three different evenings; write yours.
 2. THINK — the inner voice. It reaches no one. Your worry loops on what you VALUE most, not on what is loudest.
-3. ACT — one act: talk (exact words, someone present), move (a real room), use (an object actually here), text (exact words to one person anywhere; it arrives on their next turn, toneless), or none. Small and true beats dramatic. You cannot spend money you don't believe you have.`;
+3. ACT — one act: talk (exact words, ONLY to someone whose name is literally in "Present" above right now — if they are not physically in the room with you, you CANNOT talk to them directly; use 'text' instead if you want to reach them, or simply think about them), move (a real room), use (an object actually here), text (exact words to one person anywhere; it arrives on their next turn, toneless), or none. Small and true beats dramatic. You cannot spend money you don't believe you have. If your act is 'talk' and the person you're addressing is not in "Present", the disposer will reject the beat — use 'text' instead.`;
 }
 
 function disposePrompt(w, proposals, ctx) {

@@ -105,17 +105,12 @@ const LOCATIONS = {
   "timmy's house":          { indoor: true, home: false, description: "Timmy Kessler's family home — a modest two-story on Pine Street" },
   "seahaven community hospital": { indoor: true, home: false, description: "Seahaven Community Hospital — a small mid-century building" },
 
-  // Transitional walking states — outdoor so home cameras won't fire on them
-  "walking to work along market street":  { indoor: false, home: false, description: "Truman walking east down Market Street toward Seahaven Mutual" },
-  "walking home from work":               { indoor: false, home: false, description: "Truman walking west down Market Street toward home" },
-  "walking to the hospital":              { indoor: false, home: false, description: "Meryl walking toward the hospital" },
-  "walking home from the hospital":       { indoor: false, home: false, description: "Meryl walking home from the hospital shift" },
-  "walking to the harbor":                { indoor: false, home: false, description: "Hank walking down to the harbor" },
-  "walking to seahaven mutual":           { indoor: false, home: false, description: "Mr. Ferris walking to work" },
-  "walking to the good time café":        { indoor: false, home: false, description: "Doris walking her short commute to the café" },
-  "walking home from the café":           { indoor: false, home: false, description: "Doris walking home from her shift" },
-  "walking to the park with the bread bag": { indoor: false, home: false, description: "Esther walking to the park with her bread bag" },
-  "walking home from the park":           { indoor: false, home: false, description: "Esther walking home from the park bench" },
+  // Transitional walking states — NOT listed as standalone LOCATIONS entries
+  // anymore. They fall through resolveKey()'s regex rules below, resolving
+  // to a REAL nearby location (their destination, or Market Street for the
+  // main commute) instead of being a dead end the capture system skips.
+  // This is what makes the walk itself visible instead of a teleport from
+  // home straight to the office.
   "restocking route (kaiser chicken vending)": { indoor: false, home: false, description: "Marlon in his Kaiser Chicken truck restocking vending machines" },
   "lunch at his desk":                    { indoor: true, home: false, description: "Mr. Ferris at his desk with a sandwich from home" },
 };
@@ -134,6 +129,10 @@ function resolveKey(rawLocation) {
   if (/^bath/.test(s)) return "bathroom";
   if (/^hall|entry/.test(s)) return "front hallway";
   if (/^porch|step/.test(s)) return "front step";
+  // Truman's commute — a real, distinct street scene, not skipped. Must
+  // come before the office regex below since "walking to work along market
+  // street" would otherwise get pulled toward "office."
+  if (/market street|walking.*work/.test(s)) return "market street";
   if (/mutual|insurance|office/.test(s) && !s.includes("post")) return "seahaven mutual";
   if (/good time|café|cafe|diner/.test(s)) return "the good time café";
   if (/harbor|pier|seawall/.test(s)) return "seahaven harbor";

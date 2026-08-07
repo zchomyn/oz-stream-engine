@@ -726,7 +726,27 @@ function ritualPressure(a, id) {
     }
     if (h >= 16 && h < 17)       return ritual("just home from the shift — kick off the sneakers, put the kettle on, sit for ten quiet minutes before starting anything");
     if (h >= 17 && h < 18)       return ritual("start dinner — pull ingredients from the fridge, use the oven or the stove, make something wholesome");
-    if (h >= 18 && h < 18.75)    return ritual("DINNER WITH TRUMAN: sit together, ask about his day, watch how he responds, keep the tone even");
+    if (h >= 18 && h < 18.75) {
+      // World memory: does the ledger show a recent food purchase? If so,
+      // dinner should plausibly use it — this is what makes "bought fish
+      // today" actually connect to "fish for dinner" instead of the two
+      // living in separate, unconnected beats. Not hardcoded to any
+      // specific item — reads whatever was actually logged as purchased.
+      let dinnerBase = "DINNER WITH TRUMAN: sit together, ask about his day, watch how he responds, keep the tone even";
+      try {
+        const LG = getLedger();
+        const recentPurchases = LG.recentAll(1, W.day).filter((e) =>
+          e.kind === "purchase" && (e.actors || []).some((a) => a === "meryl" || a === "truman")
+        );
+        const foodPurchase = recentPurchases.find((e) =>
+          /grocer|food|meat|fish|vegetable|produce|bread|milk|egg|chicken|beef|pork/i.test(e.summary || "")
+        );
+        if (foodPurchase) {
+          dinnerBase = `DINNER WITH TRUMAN: sit together, ask about his day, watch how he responds, keep the tone even. Tonight's meal plausibly uses what was bought recently — ${foodPurchase.summary}`;
+        }
+      } catch (_) {}
+      return ritual(dinnerBase);
+    }
   }
 
   // Marlon weekday — restocking route. Rotates so his day doesn't feel

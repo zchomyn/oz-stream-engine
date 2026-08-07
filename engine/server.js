@@ -52,33 +52,40 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
         return res.end(placeholder);
       }
-      const objectPath = info.meta.objectPath || `buffer/frame_${String(info.index).padStart(8, "0")}.jpg`;
-      const url = await GCS.signedUrl(objectPath, 300);
-      if (!url) {
-        // Fall back to piping through us if signing fails
-        const frame = await STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
-        if (!frame?.bytes) {
-          const placeholder = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
-          res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
-          return res.end(placeholder);
+      // Only attempt a redirect when GCS is actually configured. In local
+      // fallback mode, signedUrl() would return a raw filesystem path —
+      // not a fetchable URL — so we must pipe bytes directly instead.
+      const useRedirect = GCS.mode() === "gcs";
+      if (useRedirect) {
+        const objectPath = info.meta.objectPath || `buffer/frame_${String(info.index).padStart(8, "0")}.jpg`;
+        const url = await GCS.signedUrl(objectPath, 300);
+        if (url) {
+          res.writeHead(302, {
+            "Location": url,
+            "Cache-Control": "no-store, must-revalidate",
+            "X-Stream-Index": String(info.index),
+            "X-Stream-Backlog": String(info.backlog),
+            "Access-Control-Allow-Origin": "*",
+          });
+          return res.end();
         }
-        res.writeHead(200, {
-          "Content-Type": "image/jpeg",
-          "Cache-Control": "no-store, must-revalidate",
-          "Access-Control-Allow-Origin": "*",
-          "X-Stream-Index": String(frame.index),
-          "X-Stream-Backlog": String(frame.backlog),
-        });
-        return res.end(frame.bytes);
+        // fall through to direct pipe if signing failed
       }
-      res.writeHead(302, {
-        "Location": url,
+      // Direct pipe (local fallback mode, or GCS signing failed)
+      const frame = await STREAM_BUFFER.currentFrame(APE.CFG.STREAM_PLAYBACK_MS);
+      if (!frame?.bytes) {
+        const placeholder = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+        res.writeHead(200, { "Content-Type": "image/gif", "Cache-Control": "no-store" });
+        return res.end(placeholder);
+      }
+      res.writeHead(200, {
+        "Content-Type": "image/jpeg",
         "Cache-Control": "no-store, must-revalidate",
-        "X-Stream-Index": String(info.index),
-        "X-Stream-Backlog": String(info.backlog),
         "Access-Control-Allow-Origin": "*",
+        "X-Stream-Index": String(frame.index),
+        "X-Stream-Backlog": String(frame.backlog),
       });
-      return res.end();
+      return res.end(frame.bytes);
     } catch (e) {
       return json(res, 500, { error: e.message });
     }
